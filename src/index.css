@@ -1,0 +1,241 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+
+  --color-plum-50: #faf5fd;
+  --color-plum-100: #f2e6f9;
+  --color-plum-200: #e4c7f2;
+  --color-plum-300: #ce9ce6;
+  --color-plum-400: #b26fd6;
+  --color-plum-500: #9548c2;
+  --color-plum-600: #7a32a3;
+  --color-plum-700: #612485;
+  --color-plum-800: #4c1a6b;
+  --color-plum-900: #3a1253;
+  --color-plum-950: #2a0a3d;
+
+  --color-gold: #e8a33c;
+
+  /* Alertas: escala própria, SEM vermelho — o vermelho pertence à
+     categoria "puérpera". Ver CLAUDE.md. */
+  --color-ok: #059669;
+  --color-ok-text: #047857;
+  --color-warn: #e8a33c;
+  --color-warn-text: #b45309;
+  --color-late: #ea580c;
+  --color-late-text: #c2410c;
+}
+
+:root {
+  --app-bg: #faf8fb;
+  --surface: #ffffff;
+  --head-bg: #faf5fd;
+  --border: #e8e1ee;
+  --text: #1b1020;
+  --text-dim: #6b5b75;
+  --tag-bg: #faf5fd;
+  --row-hover: #faf5fd;
+  --alert-soft: rgba(234, 88, 12, 0.1);
+  --alert-text: #c2410c;
+  --ok-text: #047857;
+  --warn-text: #b45309;
+  color-scheme: light;
+}
+
+:root[data-theme='escuro'] {
+  --app-bg: #140a1b;
+  --surface: #1e1228;
+  --head-bg: #251733;
+  --border: #33223f;
+  --text: #f1eaf5;
+  --text-dim: #a795b2;
+  --tag-bg: #251733;
+  --row-hover: #251733;
+  --alert-soft: rgba(234, 88, 12, 0.16);
+  --alert-text: #fdba74;
+  --ok-text: #6ee7b7;
+  --warn-text: #fcd34d;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.field:focus-within {
+  border-color: var(--color-plum-500);
+  box-shadow: 0 0 0 3px rgba(149, 72, 194, 0.18);
+}
+.field input,
+.field select,
+.field textarea {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+.field--alert {
+  border-color: var(--color-late);
+}
+
+.lbl {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 5px;
+}
+
+.sec {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-plum-700);
+  margin: 0 0 10px;
+}
+:root[data-theme='escuro'] .sec {
+  color: var(--color-plum-300);
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.pill--on {
+  border-color: var(--color-plum-700);
+  background: var(--head-bg);
+  font-weight: 600;
+}
+.pill input {
+  accent-color: var(--color-plum-700);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  flex: 0 0 15px;
+}
+
+.calc {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px dashed var(--border);
+  border-radius: 9px;
+  background: var(--app-bg);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--row-hover);
+}
+.btn--primary {
+  border: 0;
+  background: var(--color-plum-950);
+  color: #fff;
+  font-weight: 600;
+}
+:root[data-theme='escuro'] .btn--primary {
+  background: var(--color-plum-700);
+}
+.btn--primary:hover {
+  background: var(--color-plum-600);
+}
+.btn--icon {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+}
+
+@keyframes pulse-late {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.pulse {
+  animation: pulse-late 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+  }
+}
