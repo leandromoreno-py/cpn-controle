@@ -45,10 +45,11 @@ Enquanto o `.env` não existir, o app continua em modo local sem erro.
 O workflow em `.github/workflows/deploy.yml` faz build e publica a cada push na branch
 `main`. Para ativar:
 
-1. **Settings → Pages → Source: GitHub Actions**.
-2. Se o repositório **não** se chamar `<usuario>.github.io`, adicione uma variável de
-   repositório `VITE_BASE` com o valor `/nome-do-repositorio/`
-   (**Settings → Secrets and variables → Actions → Variables**).
+**Settings → Pages → Source: GitHub Actions**. É o único passo.
+
+O prefixo de caminho do site já está em `vite.config.ts` (`BASE_PUBLICACAO`), aplicado
+só no build — o servidor de desenvolvimento continua na raiz de `localhost:5173`. Se
+você renomear o repositório, mude essa constante.
 
 Atenção: um site no GitHub Pages fica acessível a quem tiver o endereço, mesmo com o
 repositório privado. Enquanto é demonstração com dados fictícios, sem problema. Para
