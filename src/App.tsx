@@ -129,6 +129,16 @@ export default function App() {
                 type="button"
                 className="btn btn--icon"
                 style={{ width: 40, height: 40, flex: '0 0 40px' }}
+                onClick={() => setCompacto(false)}
+                aria-label="Ver em formato de quadro"
+                title="Ver em formato de quadro"
+              >
+                🖥
+              </button>
+              <button
+                type="button"
+                className="btn btn--icon"
+                style={{ width: 40, height: 40, flex: '0 0 40px' }}
                 onClick={alternarTema}
                 aria-label={`Mudar para tema ${tema === 'claro' ? 'escuro' : 'claro'}`}
               >
@@ -251,14 +261,6 @@ export default function App() {
                       disabled={ativas.length === 0}
                     >
                       ✎ Editar paciente
-                    </button>
-                    <button
-                      type="button"
-                      className="btn"
-                      style={{ flex: '1 1 150px', height: 40 }}
-                      onClick={() => setCompacto(false)}
-                    >
-                      🖥 Ver como quadro
                     </button>
                   </div>
                 )}
