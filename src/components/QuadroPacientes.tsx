@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Paciente } from '../types';
 import { useApp } from '../state/store';
 import { LinhaPaciente, formatarIntervalo } from './LinhaPaciente';
+import { CartaoPaciente } from './CartaoPaciente';
 import { estiloCategoria } from '../lib/contrast';
 import { situacaoControle } from '../lib/calc';
 
@@ -15,6 +16,7 @@ export function QuadroPacientes({
   soAtrasadas,
   categoriaFiltro,
   ordem,
+  compacto,
   onRegistrar,
   onAnamnese,
   onEditar,
@@ -24,6 +26,8 @@ export function QuadroPacientes({
   soAtrasadas: boolean;
   categoriaFiltro: string | null;
   ordem: Ordem;
+  /** Tela estreita: as linhas viram cartões empilhados. */
+  compacto: boolean;
   onRegistrar(p: Paciente): void;
   onAnamnese(p: Paciente): void;
   onEditar(p: Paciente): void;
@@ -87,6 +91,31 @@ export function QuadroPacientes({
   const livres = daSessao.filter((l) => l.status === 'livre' && l.ativo).length;
   const limpeza = daSessao.filter((l) => l.status === 'limpeza').length;
   const ocupados = daSessao.filter((l) => l.status === 'ocupado').length;
+
+  if (compacto) {
+    return (
+      <div style={{ padding: '12px 12px 28px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ color: 'var(--text-dim)', fontSize: 11.5 }}>
+          {ativas.length} paciente(s) · {ocupados} leitos ocupados · {livres} livres
+        </div>
+        {ativas.length === 0 && (
+          <p style={{ color: 'var(--text-dim)' }}>
+            Nenhuma paciente em {sessaoAtiva.nome} corresponde aos filtros.
+          </p>
+        )}
+        {ativas.map((p) => (
+          <CartaoPaciente
+            key={p.id}
+            paciente={p}
+            onRegistrar={onRegistrar}
+            onAnamnese={onAnamnese}
+            onEditar={onEditar}
+            onEncerrar={onEncerrar}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '12px 24px 28px' }}>

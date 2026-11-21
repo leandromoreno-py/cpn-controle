@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Paciente } from './types';
 import { useApp } from './state/store';
 import { Sidebar, iniciais, type Pagina } from './components/Sidebar';
@@ -15,6 +15,10 @@ import { horaHM, situacaoControle } from './lib/calc';
 import { DESFECHO_LABEL, FUNCAO_LABEL, STATUS_LABEL } from './types';
 
 type Ordem = 'leito' | 'atraso' | 'categoria';
+
+const CHAVE_VISTA = 'cpn-controle:vista';
+/** Abaixo disto, o quadro de dois níveis só caberia com rolagem horizontal. */
+const LARGURA_MINIMA_QUADRO = 900;
 
 export default function App() {
   const {
@@ -33,6 +37,25 @@ export default function App() {
   const [soAtrasadas, setSoAtrasadas] = useState(false);
   const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null);
   const [ordem, setOrdem] = useState<Ordem>('leito');
+  // Visualização: o usuário decide pelo botão, e a primeira abertura adivinha
+  // pela largura da tela.
+  const [compacto, setCompacto] = useState<boolean>(() => {
+    const salvo = localStorage.getItem(CHAVE_VISTA);
+    if (salvo === 'celular') return true;
+    if (salvo === 'quadro') return false;
+    return window.innerWidth < LARGURA_MINIMA_QUADRO;
+  });
+  const [sidebarAberta, setSidebarAberta] = useState(
+    () => window.innerWidth >= LARGURA_MINIMA_QUADRO
+  );
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem(CHAVE_VISTA, compacto ? 'celular' : 'quadro');
+    // Em celular a gaveta começa fechada: o quadro é o que importa.
+    if (compacto) setSidebarAberta(false);
+  }, [compacto]);
+
   const [admitindo, setAdmitindo] = useState(false);
   const [registrando, setRegistrando] = useState<Paciente | null>(null);
   const [anamnese, setAnamnese] = useState<Paciente | null>(null);
@@ -55,10 +78,194 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexWrap: 'wrap', alignItems: 'stretch' }}>
-      <Sidebar pagina={pagina} irPara={setPagina} />
+      <Sidebar
+        pagina={pagina}
+        irPara={setPagina}
+        aberta={sidebarAberta}
+        sobreposta={compacto}
+        onFechar={() => setSidebarAberta(false)}
+      />
 
       <div style={{ flex: '999 1 560px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        {/* TOPBAR */}
+        {compacto ? (
+          <header
+            style={{
+              background: 'var(--surface)',
+              borderBottom: '1px solid var(--border)',
+              padding: '10px 12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 9,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <button
+                type="button"
+                className="btn btn--icon"
+                style={{ width: 40, height: 40, flex: '0 0 40px' }}
+                onClick={() => setSidebarAberta(true)}
+                aria-label="Abrir o menu"
+              >
+                ☰
+              </button>
+              <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                <h1
+                  style={{
+                    margin: 0,
+                    fontSize: 15,
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {pagina === 'quadro' ? sessaoAtiva.nome : titulo(pagina)}
+                </h1>
+                <div style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                  {ativas.length} ativas · {atrasadas} atrasada{atrasadas === 1 ? '' : 's'}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn--icon"
+                style={{ width: 40, height: 40, flex: '0 0 40px' }}
+                onClick={alternarTema}
+                aria-label={`Mudar para tema ${tema === 'claro' ? 'escuro' : 'claro'}`}
+              >
+                {tema === 'claro' ? '☾' : '☀'}
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary"
+                style={{ flex: '0 0 auto', height: 40, padding: '0 14px' }}
+                onClick={() => setAdmitindo(true)}
+              >
+                ✚ Admitir
+              </button>
+            </div>
+
+            {pagina === 'quadro' && (
+              <>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div className="field" style={{ flex: '1 1 auto', height: 40 }}>
+                    <label className="sr-only" htmlFor="busca-compacta">
+                      Buscar por nome ou leito
+                    </label>
+                    <input
+                      id="busca-compacta"
+                      type="search"
+                      placeholder="Buscar…"
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{
+                      flex: '0 0 auto',
+                      height: 40,
+                      padding: '0 12px',
+                      ...(soAtrasadas
+                        ? {
+                            borderColor: 'var(--color-late)',
+                            background: 'var(--alert-soft)',
+                            color: 'var(--alert-text)',
+                            fontWeight: 600,
+                          }
+                        : {}),
+                    }}
+                    onClick={() => setSoAtrasadas((v) => !v)}
+                    aria-pressed={soAtrasadas}
+                  >
+                    ⚠ {atrasadas}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ flex: '0 0 auto', height: 40, padding: '0 12px' }}
+                    onClick={() => setFiltrosAbertos((v) => !v)}
+                    aria-expanded={filtrosAbertos}
+                  >
+                    Filtros {filtrosAbertos ? '▴' : '▾'}
+                  </button>
+                </div>
+
+                {filtrosAbertos && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <div className="field" style={{ flex: '1 1 150px', height: 40 }}>
+                      <label className="sr-only" htmlFor="filtro-cat-c">
+                        Filtrar por categoria
+                      </label>
+                      <select
+                        id="filtro-cat-c"
+                        value={categoriaFiltro ?? ''}
+                        onChange={(e) => setCategoriaFiltro(e.target.value || null)}
+                      >
+                        <option value="">Todas as categorias</option>
+                        {estado.categorias.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field" style={{ flex: '1 1 150px', height: 40 }}>
+                      <label className="sr-only" htmlFor="ordem-c">
+                        Ordenar por
+                      </label>
+                      <select
+                        id="ordem-c"
+                        value={ordem}
+                        onChange={(e) => setOrdem(e.target.value as Ordem)}
+                      >
+                        <option value="leito">Ordenar por leito</option>
+                        <option value="atraso">Mais atrasadas primeiro</option>
+                        <option value="categoria">Por categoria</option>
+                      </select>
+                    </div>
+                    <div className="field" style={{ flex: '1 1 150px', height: 40 }}>
+                      <label className="sr-only" htmlFor="usuario-c">
+                        Usuário desta sessão
+                      </label>
+                      <select
+                        id="usuario-c"
+                        value={usuarioAtual.id}
+                        onChange={(e) => definirUsuarioAtual(e.target.value)}
+                      >
+                        {estado.usuarios.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ flex: '1 1 150px', height: 40 }}
+                      onClick={() => {
+                        setEditando(null);
+                        setEditorAberto(true);
+                      }}
+                      disabled={ativas.length === 0}
+                    >
+                      ✎ Editar paciente
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ flex: '1 1 150px', height: 40 }}
+                      onClick={() => setCompacto(false)}
+                    >
+                      🖥 Ver como quadro
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </header>
+        ) : (
         <header
           style={{
             background: 'var(--surface)',
@@ -70,6 +277,17 @@ export default function App() {
             gap: 14,
           }}
         >
+          <button
+            type="button"
+            className="btn btn--icon"
+            onClick={() => setSidebarAberta((v) => !v)}
+            aria-label={sidebarAberta ? 'Recolher o menu lateral' : 'Abrir o menu lateral'}
+            aria-expanded={sidebarAberta}
+            title={sidebarAberta ? 'Recolher o menu' : 'Abrir o menu'}
+            style={{ flex: '0 0 34px' }}
+          >
+            ☰
+          </button>
           <div style={{ flex: '0 0 auto' }}>
             <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, letterSpacing: -0.2 }}>
               {pagina === 'quadro' ? sessaoAtiva.nome : titulo(pagina)}
@@ -199,6 +417,15 @@ export default function App() {
             <button
               type="button"
               className="btn btn--icon"
+              onClick={() => setCompacto(true)}
+              aria-label="Ver em formato de celular"
+              title="Ver em formato de celular"
+            >
+              📱
+            </button>
+            <button
+              type="button"
+              className="btn btn--icon"
               onClick={alternarTema}
               aria-label={`Mudar para tema ${tema === 'claro' ? 'escuro' : 'claro'}`}
               title={`Tema ${tema}`}
@@ -222,6 +449,7 @@ export default function App() {
             </button>
           </div>
         </header>
+        )}
 
         <div
           style={{
@@ -245,6 +473,7 @@ export default function App() {
             soAtrasadas={soAtrasadas}
             categoriaFiltro={categoriaFiltro}
             ordem={ordem}
+            compacto={compacto}
             onRegistrar={setRegistrando}
             onAnamnese={setAnamnese}
             onEditar={(p) => {

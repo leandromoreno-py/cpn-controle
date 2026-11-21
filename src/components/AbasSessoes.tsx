@@ -33,7 +33,7 @@ export function AbasSessoes() {
         display: 'flex',
         alignItems: 'center',
         gap: 6,
-        padding: '0 24px',
+        padding: '0 12px',
         background: 'var(--surface)',
         borderBottom: '1px solid var(--border)',
         overflowX: 'auto',

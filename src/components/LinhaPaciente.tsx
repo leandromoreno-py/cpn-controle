@@ -20,7 +20,7 @@ import {
 const COLUNAS =
   '78px minmax(190px, 1.25fr) 94px 80px minmax(170px, 1.3fr) 142px 132px 92px';
 
-interface Vital {
+export interface Vital {
   label: string;
   valor: string;
   alerta: boolean;
@@ -62,10 +62,7 @@ export function LinhaPaciente({
     (m) => m.pacienteId === paciente.id && m.status === 'em_curso'
   );
   const exames = estado.exames.filter((e) => e.pacienteId === paciente.id);
-  const alertas = ultimo ? alertasClinicos(ultimo) : [];
-  const camposEmAlerta = new Set(alertas.map((a) => a.campo));
-
-  const vitais = montarVitais(paciente, ultimo, estado.controles, camposEmAlerta);
+  const vitais = montarVitais(paciente, ultimo, estado.controles);
   const toqueRecente = controlesDe(paciente.id, estado.controles).find(
     (c) => c.toque?.dilatacaoCm != null
   );
@@ -505,13 +502,14 @@ export function formatarIntervalo(min: number): string {
   return min % 60 === 0 ? `${min / 60}h` : `${min} min`;
 }
 
-function montarVitais(
+/** Os chips de sinais vitais da última aferição, já marcados com alerta. */
+export function montarVitais(
   paciente: Paciente,
   ultimo: Controle | undefined,
-  controles: Controle[],
-  emAlerta: Set<string>
+  controles: Controle[]
 ): Vital[] {
   if (!ultimo) return [];
+  const emAlerta = new Set(alertasClinicos(ultimo).map((a) => a.campo));
   const v: Vital[] = [];
   const push = (campo: string, label: string, valor: string | null) => {
     if (valor == null) return;

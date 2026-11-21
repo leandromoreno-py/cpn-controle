@@ -57,6 +57,20 @@ ou movê-la de leito não pode acontecer por um clique torto no meio do plantão
 O leito é o alvo mais fácil de acertar na linha, e é por onde o plantão pensa — por
 isso ele, e não um menu genérico, carrega essas ações.
 
+### Duas visualizações: quadro e celular
+
+O quadro de dois níveis precisa de uns 900 px. Abaixo disso ele só caberia com rolagem
+horizontal, que é intolerável para conferir sinal vital — então em tela estreita cada
+paciente vira um **cartão empilhado** (`CartaoPaciente`), com a mesma informação em
+blocos que descem e alvos de toque de 44 px.
+
+O botão 📱 na barra superior alterna à mão, e a escolha fica salva. Na primeira
+abertura o app adivinha pela largura da tela. O cartão mostra identificação, controles
+e um resumo do que falta; **Mais** abre medicações e exames.
+
+O painel lateral é retrátil pelo ☰. Em modo celular ele vira gaveta sobreposta, com
+fundo escurecido, e fecha sozinho ao escolher um item.
+
 ### A linha do paciente tem DOIS NÍVEIS
 
 Cada paciente é uma linha, dividida em dois níveis separados por borda tracejada.
@@ -225,6 +239,7 @@ src/
   services/seed.ts     8 pacientes fictícias cobrindo as 4 categorias
   state/store.tsx      contexto, ações e gravação da auditoria
   components/          Sidebar, AbasSessoes, QuadroPacientes, LinhaPaciente,
+                       CartaoPaciente, MenuLeito,
                        ModalAdmissao, ModalControles, ModalAnamnese,
                        ModalEditarPaciente, ModalEncerrar, ConfigLeitos,
                        ConfigCategorias
