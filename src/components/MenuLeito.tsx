@@ -36,9 +36,25 @@ export function MenuLeito({
   const atual = estado.categorias.find((c) => c.id === paciente.categoriaId);
   const leito = estado.leitos.find((l) => l.id === paciente.leitoId);
 
-  const livres = estado.leitos.filter(
-    (l) => l.sessaoId === sessaoAtiva.id && l.status === 'livre' && l.ativo
+  const daSessao = estado.leitos.filter(
+    (l) => l.sessaoId === sessaoAtiva.id && l.id !== paciente.leitoId
   );
+  const livres = daSessao.filter((l) => l.status === 'livre' && l.ativo);
+
+  const ocupantePorLeito = new Map(
+    estado.pacientes
+      .filter((p) => !p.arquivada && p.leitoId)
+      .map((p) => [p.leitoId as string, p.nome])
+  );
+
+  // Mesma regra da admissão: mostrar todos e dizer por que cada um não serve.
+  const motivo = (l: (typeof daSessao)[number]): string | null => {
+    if (!l.ativo) return 'inativo';
+    if (l.status === 'ocupado') return ocupantePorLeito.get(l.id) ?? 'ocupado';
+    if (l.status === 'limpeza') return 'em limpeza';
+    if (l.status === 'bloqueado') return 'bloqueado';
+    return null;
+  };
 
   const confirmar = () => {
     if (!pendente) return;
@@ -167,13 +183,19 @@ export function MenuLeito({
                   onChange={(ev) => setLeitoDestino(ev.target.value)}
                 >
                   <option value="">
-                    {livres.length ? 'Escolher leito livre…' : 'Nenhum leito livre'}
+                    {livres.length
+                      ? `Escolher entre ${livres.length} livre(s)…`
+                      : 'Nenhum leito livre'}
                   </option>
-                  {livres.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.nome}
-                    </option>
-                  ))}
+                  {daSessao.map((l) => {
+                    const porque = motivo(l);
+                    return (
+                      <option key={l.id} value={l.id} disabled={porque !== null}>
+                        {l.nome}
+                        {porque ? ` — ${porque}` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <button

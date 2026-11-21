@@ -10,12 +10,28 @@ const num = (v: string): number | undefined =>
   v.trim() === '' ? undefined : Number(v.replace(',', '.'));
 
 export function ModalAdmissao({ onFechar }: { onFechar(): void }) {
-  const { estado, admitir, usuarioAtual, sessaoAtiva } = useApp();
+  const { estado, admitir, usuarioAtual, sessaoAtiva, liberarLeito } = useApp();
 
-  // Só leitos livres e ativos da sessão ativa entram na lista.
-  const disponiveis = estado.leitos.filter(
-    (l) => l.sessaoId === sessaoAtiva.id && l.status === 'livre' && l.ativo
+  // A lista mostra TODOS os leitos da sessão, não só os livres: um leito que
+  // some sem explicação faz a pessoa achar que o app está quebrado.
+  const leitosDaSessao = estado.leitos.filter((l) => l.sessaoId === sessaoAtiva.id);
+  const disponiveis = leitosDaSessao.filter((l) => l.status === 'livre' && l.ativo);
+
+  const ocupantePorLeito = new Map(
+    estado.pacientes
+      .filter((p) => !p.arquivada && p.leitoId)
+      .map((p) => [p.leitoId as string, p.nome])
   );
+
+  const motivoIndisponivel = (l: (typeof leitosDaSessao)[number]): string | null => {
+    if (!l.ativo) return 'inativo';
+    if (l.status === 'ocupado') return ocupantePorLeito.get(l.id) ?? 'ocupado';
+    if (l.status === 'limpeza') return 'em limpeza';
+    if (l.status === 'bloqueado') return l.observacao ? `bloqueado — ${l.observacao}` : 'bloqueado';
+    return null;
+  };
+
+  const emLimpeza = leitosDaSessao.filter((l) => l.status === 'limpeza' && l.ativo);
 
   const [leitoId, setLeitoId] = useState(disponiveis[0]?.id ?? '');
   const [nome, setNome] = useState('');
@@ -125,14 +141,25 @@ export function ModalAdmissao({ onFechar }: { onFechar(): void }) {
       }
     >
       <Secao titulo="Identificação">
-        <Campo label="Leito">
+        <Campo
+          label="Leito"
+          dica={
+            semLeito
+              ? 'Nenhum leito livre nesta sessão.'
+              : `${disponiveis.length} livre(s) de ${leitosDaSessao.length}.`
+          }
+        >
           <select value={leitoId} onChange={(e) => setLeitoId(e.target.value)} aria-label="Leito">
-            {disponiveis.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.nome}
-              </option>
-            ))}
             {semLeito && <option value="">Nenhum livre</option>}
+            {leitosDaSessao.map((l) => {
+              const motivo = motivoIndisponivel(l);
+              return (
+                <option key={l.id} value={l.id} disabled={motivo !== null}>
+                  {l.nome}
+                  {motivo ? ` — ${motivo}` : ''}
+                </option>
+              );
+            })}
           </select>
         </Campo>
         <Campo label="Nome" span={2}>
@@ -167,6 +194,43 @@ export function ModalAdmissao({ onFechar }: { onFechar(): void }) {
           </select>
         </Campo>
       </Secao>
+
+      {emLimpeza.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 9,
+            padding: '10px 12px',
+            border: '1px solid var(--border)',
+            borderLeft: '4px solid var(--color-warn)',
+            borderRadius: 10,
+            background: 'rgba(232,163,60,0.09)',
+          }}
+        >
+          <span style={{ flex: '1 1 240px', color: 'var(--warn-text)', fontSize: 12 }}>
+            {emLimpeza.length === 1
+              ? `O leito ${emLimpeza[0].nome} está em limpeza.`
+              : `${emLimpeza.length} leitos estão em limpeza.`}{' '}
+            Libere para poder admitir nele.
+          </span>
+          {emLimpeza.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              className="btn"
+              style={{ height: 32, padding: '0 11px', fontSize: 11.5 }}
+              onClick={() => {
+                liberarLeito(l.id);
+                setLeitoId(l.id);
+              }}
+            >
+              Liberar {l.nome}
+            </button>
+          ))}
+        </div>
+      )}
 
       <Secao titulo="Obstétrico">
         <Campo label="Gestações (G)">

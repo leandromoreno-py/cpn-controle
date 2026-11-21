@@ -167,7 +167,13 @@ número.
 2. Desativar não é excluir: o leito sai da lista de admissão e continua no histórico.
 3. Transferência marca o leito de origem como "em limpeza" automaticamente.
 4. "Em limpeza" volta a "livre" pelo botão Liberar no mapa.
-5. Admissão e transferência só oferecem leitos livres e ativos.
+5. Admissão e transferência só **aceitam** leitos livres e ativos, mas **mostram
+   todos**, com os indisponíveis desabilitados e o motivo ao lado ("A — Maria Clara
+   S. Nunes", "J — em limpeza", "L — bloqueado"). Um leito que some da lista sem
+   explicação faz a pessoa achar que o app está quebrado; foi exatamente o que
+   aconteceu em teste.
+6. A admissão oferece um botão para liberar ali mesmo um leito em limpeza, sem
+   precisar ir às configurações.
 
 Leitos: fixos A a L, mais Extra 1 a 3, mais os que o admin criar.
 
