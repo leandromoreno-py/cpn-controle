@@ -40,10 +40,22 @@ primeira sessão não pode ser excluída, para o app nunca ficar sem nenhuma. Ex
 sessão apaga seus leitos e pacientes, e por isso pede confirmação dizendo quantas
 pacientes ativas serão perdidas.
 
-### A anamnese abre pelo chip do leito
+### O retângulo do leito é a caixa de edição
 
-Clicar na letra do leito abre a anamnese — a descrição do caso em texto livre. O chip
-é o alvo mais rápido de acertar na linha, e ganha um marcador quando já existe texto.
+Clicar no leito abre um painel ancorado nele com:
+
+- **Situação** — trocar a categoria da paciente (Gestante → Puérpera → O.F. …).
+- **Transferir de leito** — escolher um leito livre da sessão e mover.
+- **Anamnese** — a descrição do caso em texto livre, com marcador no chip quando já
+  existe texto.
+- **Editar dados** e **Arquivar / encerrar atendimento**.
+
+**Toda ação do painel passa por confirmação em palavras**, dizendo o que vai acontecer
+("Mudar a situação de Gestante para Óbito fetal?"). Trocar a situação de uma paciente
+ou movê-la de leito não pode acontecer por um clique torto no meio do plantão.
+
+O leito é o alvo mais fácil de acertar na linha, e é por onde o plantão pensa — por
+isso ele, e não um menu genérico, carrega essas ações.
 
 ### A linha do paciente tem DOIS NÍVEIS
 
@@ -60,8 +72,13 @@ Barra vertical de 5 px + chip + fundo tingido a 9 % (13 % no hover). Nunca a cor
 saturada no bloco inteiro: isso derruba o contraste do texto e esconde os alertas
 clínicos.
 
-Categorias: Gestante `#2563EB`, Puérpera `#C2185B`, Aborto `#1F2937`, Não classificado
-`#9CA3AF`. Todas editáveis pelo admin em Configurações › Categorias.
+Categorias: Gestante `#2563EB`, Puérpera `#C2185B`, **O.F.** (óbito fetal) `#0F766E`,
+Aborto `#1F2937`, Não classificado `#9CA3AF`. Todas editáveis pelo admin em
+Configurações › Categorias.
+
+O rótulo da categoria é curto porque precisa caber no chip da linha — por isso "O.F." e
+não "Óbito fetal". O nome por extenso vive em `descricao` e aparece no título ao passar
+o mouse, na confirmação de troca e na tela de configuração.
 
 ### Nenhum alerta usa vermelho
 
@@ -92,9 +109,13 @@ desfecho, óbito materno e óbito fetal. Óbito exige causa preenchida; transfer
 exige destino. Registrar o desfecho em **Encerrar atendimento** arquiva a paciente e
 devolve o leito como "em limpeza".
 
-**Natimorto** é registrado como óbito fetal, não como parto com RN. Se o serviço
-preferir registrar o parto e marcar o natimorto no bloco do RN, isso muda a modelagem —
-vale confirmar antes da etapa 4.
+**Óbito fetal é SITUAÇÃO, não desfecho.** A paciente com óbito fetal continua
+internada e ainda vai parir: ela recebe a categoria O.F. pela caixa do leito, e o
+desfecho dela será o parto, com o recém-nascido registrado com destino "Natimorto".
+Por isso `obito_fetal` não aparece na lista de desfechos de Encerrar atendimento,
+embora o tipo continue existindo para dados antigos.
+
+Óbito **materno** continua sendo desfecho: encerra o atendimento e exige causa.
 
 ### Balanço hídrico e toque vaginal são blocos OPCIONAIS
 
@@ -153,7 +174,7 @@ troca a sessão.
 
 ### Onde cada edição acontece
 
-- **Chip do leito** → anamnese.
+- **Retângulo do leito** → situação, transferência, anamnese, editar, arquivar.
 - **Nome da paciente, botão da barra superior, ou menu ⋯** → editar nome, idade, IG,
   situação (categoria), status, paridade, comorbidades, intervalo de controles e leito.
 - **Menu ⋯ → Encerrar atendimento** → alta, óbito, transferência; arquiva e libera o

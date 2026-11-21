@@ -8,6 +8,9 @@ import { isoComHora } from '../lib/calc';
 const num = (v: string): number | undefined =>
   v.trim() === '' ? undefined : Number(v.replace(',', '.'));
 
+// Óbito fetal não entra aqui: é uma SITUAÇÃO da paciente (categoria O.F.),
+// porque ela continua internada e ainda vai parir. O desfecho dela será o
+// parto, com o recém-nascido registrado como natimorto.
 const TIPOS: TipoDesfecho[] = [
   'parto_normal',
   'cesarea',
@@ -15,7 +18,6 @@ const TIPOS: TipoDesfecho[] = [
   'alta_sem_desfecho',
   'transferida_sem_desfecho',
   'obito_materno',
-  'obito_fetal',
 ];
 
 /**
@@ -49,7 +51,7 @@ export function ModalEncerrar({
 
   const leito = estado.leitos.find((l) => l.id === paciente.leitoId);
   const nasceu = tipo === 'parto_normal' || tipo === 'cesarea';
-  const obito = tipo === 'obito_materno' || tipo === 'obito_fetal';
+  const obito = tipo === 'obito_materno';
   const transferencia = tipo === 'transferida_sem_desfecho';
 
   const valido = transferencia ? destino.trim().length > 1 : obito ? causa.trim().length > 1 : true;
@@ -156,7 +158,7 @@ export function ModalEncerrar({
             <input
               value={causa}
               onChange={(e) => setCausa(e.target.value)}
-              placeholder={tipo === 'obito_materno' ? 'Causa do óbito materno' : 'Causa do óbito fetal'}
+              placeholder="Causa do óbito materno"
               aria-label="Causa do óbito"
             />
           </Campo>
@@ -196,7 +198,7 @@ export function ModalEncerrar({
           titulo="Registrar dados do recém-nascido"
           ativo={temRn}
           onToggle={setTemRn}
-          rodape="Para natimorto, escolha Óbito fetal no desfecho acima."
+          rodape="Natimorto: marque a situação O.F. na caixa do leito e escolha Natimorto no destino."
         >
           <Campo label="Sexo">
             <select
@@ -224,6 +226,7 @@ export function ModalEncerrar({
               <option>Alojamento conjunto</option>
               <option>UTI neonatal</option>
               <option>Unidade de cuidados intermediários</option>
+              <option>Natimorto</option>
               <option>Outro</option>
             </select>
           </Campo>

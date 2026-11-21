@@ -49,6 +49,7 @@ interface Ctx {
   }): void;
   atualizarPaciente(id: string, mudancas: Partial<Paciente>, campo?: string): void;
   salvarAnamnese(pacienteId: string, texto: string): void;
+  mudarCategoria(pacienteId: string, categoriaId: string): void;
   encerrarAtendimento(pacienteId: string, desfecho: Desfecho): void;
   registrarControle(controle: Omit<Controle, 'id'>): void;
   transferirLeito(pacienteId: string, novoLeitoId: string): void;
@@ -344,6 +345,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
               valorNovo: campo
                 ? String((mudancas as Record<string, unknown>)[campo] ?? '')
                 : undefined,
+            },
+            ...e.auditoria,
+          ],
+        };
+      });
+    },
+
+    /**
+     * Troca a situação da paciente (a cor da linha). A auditoria guarda os
+     * NOMES das categorias, não os ids — o histórico tem que ser legível por
+     * quem abre a tela, não só por quem lê o banco.
+     */
+    mudarCategoria: (pacienteId, categoriaId) => {
+      mutar((e) => {
+        const paciente = e.pacientes.find((p) => p.id === pacienteId);
+        const de = e.categorias.find((c) => c.id === paciente?.categoriaId);
+        const para = e.categorias.find((c) => c.id === categoriaId);
+        return {
+          ...e,
+          pacientes: e.pacientes.map((p) =>
+            p.id === pacienteId
+              ? {
+                  ...p,
+                  categoriaId,
+                  atualizadoEm: agoraIso(),
+                  atualizadoPor: usuarioAtual.nome,
+                }
+              : p
+          ),
+          auditoria: [
+            {
+              id: novoId('aud'),
+              timestamp: agoraIso(),
+              usuarioId: usuarioAtual.id,
+              usuarioNome: usuarioAtual.nome,
+              acao: 'edicao_campo' as AcaoAuditoria,
+              pacienteId,
+              campo: 'Situação',
+              valorAnterior: de?.descricao ?? de?.nome,
+              valorNovo: para?.descricao ?? para?.nome,
             },
             ...e.auditoria,
           ],

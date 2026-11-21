@@ -20,7 +20,10 @@ export type CategoriaId = string;
 
 export interface Categoria {
   id: CategoriaId;
+  /** Rótulo exibido no quadro — curto, cabe no chip da linha (ex.: "O.F."). */
   nome: string;
+  /** Nome por extenso, usado em títulos e telas de configuração. */
+  descricao?: string;
   cor: string; // hex escolhido pelo admin; o contraste é ajustado em runtime
   ordem: number;
   padrao: boolean;

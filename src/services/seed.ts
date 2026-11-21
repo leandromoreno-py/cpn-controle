@@ -12,8 +12,16 @@ const diasAtras = (n: number) =>
 export const CATEGORIAS_PADRAO = [
   { id: 'cat_gestante', nome: 'Gestante', cor: '#2563EB', ordem: 1, padrao: true },
   { id: 'cat_puerpera', nome: 'Puérpera', cor: '#C2185B', ordem: 2, padrao: true },
-  { id: 'cat_aborto', nome: 'Aborto', cor: '#1F2937', ordem: 3, padrao: true },
-  { id: 'cat_nc', nome: 'Não classificado', cor: '#9CA3AF', ordem: 4, padrao: true },
+  {
+    id: 'cat_of',
+    nome: 'O.F.',
+    descricao: 'Óbito fetal',
+    cor: '#0F766E',
+    ordem: 3,
+    padrao: true,
+  },
+  { id: 'cat_aborto', nome: 'Aborto', cor: '#1F2937', ordem: 4, padrao: true },
+  { id: 'cat_nc', nome: 'Não classificado', cor: '#9CA3AF', ordem: 5, padrao: true },
 ];
 
 export const COMORBIDADES_PADRAO = [

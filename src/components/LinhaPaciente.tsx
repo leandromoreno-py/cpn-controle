@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Controle, Paciente } from '../types';
 import { DU_LABEL, STATUS_LABEL } from '../types';
 import { useApp } from '../state/store';
+import { MenuLeito } from './MenuLeito';
 import { estiloCategoria } from '../lib/contrast';
 import {
   alertasClinicos,
@@ -44,6 +45,7 @@ export function LinhaPaciente({
   onEncerrar(p: Paciente): void;
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
+  const [leitoAberto, setLeitoAberto] = useState(false);
   const { estado, tema, alternarExame } = useApp();
 
   const categoria = estado.categorias.find((c) => c.id === paciente.categoriaId);
@@ -86,12 +88,13 @@ export function LinhaPaciente({
     >
       {/* NÍVEL 1 */}
       <div style={{ display: 'grid', gridTemplateColumns: COLUNAS, gap: 12, alignItems: 'center' }}>
-        <div>
+        <div style={{ position: 'relative' }}>
           <button
             type="button"
-            onClick={() => onAnamnese(paciente)}
-            title="Abrir a anamnese"
-            aria-label={`Abrir a anamnese de ${paciente.nome}, leito ${leito?.nome ?? 'sem leito'}`}
+            onClick={() => setLeitoAberto((v) => !v)}
+            title="Editar situação, transferir, anamnese e arquivamento"
+            aria-expanded={leitoAberto}
+            aria-label={`Editar o leito ${leito?.nome ?? 'sem leito'} de ${paciente.nome}`}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -111,11 +114,24 @@ export function LinhaPaciente({
           >
             {leito?.nome ?? '—'}
             {paciente.anamnese?.trim() ? (
-              <span aria-hidden="true" style={{ fontSize: 10, opacity: 0.75 }}>
+              <span aria-hidden="true" title="Anamnese preenchida" style={{ fontSize: 10, opacity: 0.75 }}>
                 ▤
               </span>
             ) : null}
+            <span aria-hidden="true" style={{ fontSize: 8, opacity: 0.7 }}>
+              ▾
+            </span>
           </button>
+
+          {leitoAberto && (
+            <MenuLeito
+              paciente={paciente}
+              onFechar={() => setLeitoAberto(false)}
+              onAnamnese={onAnamnese}
+              onEditar={onEditar}
+              onEncerrar={onEncerrar}
+            />
+          )}
         </div>
 
         <div style={{ minWidth: 0 }}>

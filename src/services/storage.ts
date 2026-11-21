@@ -8,7 +8,22 @@
 // um quadro por navegador, sem multiusuário. Útil para demonstrar.
 
 import type { EstadoApp } from '../types';
-import { SESSAO_PADRAO, estadoInicial } from './seed';
+import { CATEGORIAS_PADRAO, SESSAO_PADRAO, estadoInicial } from './seed';
+
+/**
+ * Categorias padrão que foram acrescentadas depois chegam a quem já tem estado
+ * salvo. O usuário continua podendo renomeá-las, recolori-las ou criar outras.
+ */
+function completarCategorias(estado: EstadoApp): EstadoApp {
+  const faltando = CATEGORIAS_PADRAO.filter(
+    (c) => !estado.categorias.some((x) => x.id === c.id)
+  );
+  if (faltando.length === 0) return estado;
+  return {
+    ...estado,
+    categorias: [...estado.categorias, ...faltando].sort((a, b) => a.ordem - b.ordem),
+  };
+}
 
 export type Backend = 'local' | 'supabase';
 
@@ -56,14 +71,15 @@ class StorageLocal implements Storage {
         const estado = JSON.parse(bruto) as EstadoApp;
         // Um estado salvo antes de um campo novo existir não deve quebrar o app.
         if (!estado.sessoes?.length) estado.sessoes = [SESSAO_PADRAO];
-        return estado;
+        return completarCategorias(estado);
       }
       const antigo = localStorage.getItem(CHAVE_V1);
       if (antigo) {
         const migrado = migrarV1(antigo);
         if (migrado) {
-          await this.salvar(migrado);
-          return migrado;
+          const completo = completarCategorias(migrado);
+          await this.salvar(completo);
+          return completo;
         }
       }
     } catch {

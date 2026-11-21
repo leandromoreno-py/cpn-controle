@@ -51,6 +51,11 @@ export function ConfigCategorias() {
                     onChange={(ev) => salvarCategoria({ ...c, nome: ev.target.value })}
                   />
                 </div>
+                {c.descricao && (
+                  <p style={{ margin: '5px 0 0', fontSize: 11, color: 'var(--text-dim)' }}>
+                    {c.descricao}
+                  </p>
+                )}
               </div>
 
               <div style={{ flex: '0 0 170px' }}>
