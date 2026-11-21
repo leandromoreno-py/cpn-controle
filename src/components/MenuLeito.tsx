@@ -28,9 +28,12 @@ export function MenuLeito({
   onEditar(p: Paciente): void;
   onEncerrar(p: Paciente): void;
 }) {
-  const { estado, tema, sessaoAtiva, mudarCategoria, transferirLeito } = useApp();
+  const { estado, tema, sessaoAtiva, mudarCategoria, transferirLeito, renomearLeito } =
+    useApp();
   const [pendente, setPendente] = useState<Pendente>(null);
   const [leitoDestino, setLeitoDestino] = useState('');
+  const [renomeando, setRenomeando] = useState(false);
+  const [nome, setNome] = useState('');
 
   const superficie = tema === 'escuro' ? '#1E1228' : '#FFFFFF';
   const atual = estado.categorias.find((c) => c.id === paciente.categoriaId);
@@ -95,7 +98,56 @@ export function MenuLeito({
         }}
       >
         <div style={{ marginBottom: 10 }}>
-          <strong style={{ fontSize: 13 }}>Leito {leito?.nome ?? '—'}</strong>
+          {renomeando && leito ? (
+            <div className="field" style={{ height: 34 }}>
+              <label className="sr-only" htmlFor={`nome-leito-${leito.id}`}>
+                Nome do leito
+              </label>
+              <input
+                id={`nome-leito-${leito.id}`}
+                autoFocus
+                value={nome}
+                onChange={(ev) => setNome(ev.target.value)}
+                onBlur={() => {
+                  renomearLeito(leito.id, nome);
+                  setRenomeando(false);
+                }}
+                onKeyDown={(ev) => {
+                  if (ev.key === 'Enter') {
+                    renomearLeito(leito.id, nome);
+                    setRenomeando(false);
+                  }
+                  if (ev.key === 'Escape') setRenomeando(false);
+                }}
+              />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <strong style={{ fontSize: 13 }}>Leito {leito?.nome ?? '—'}</strong>
+              {leito && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNome(leito.nome);
+                    setRenomeando(true);
+                  }}
+                  aria-label={`Renomear o leito ${leito.nome}`}
+                  title="Renomear o leito"
+                  style={{
+                    border: 0,
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    color: 'var(--text-dim)',
+                    fontSize: 12,
+                    padding: 2,
+                    lineHeight: 1,
+                  }}
+                >
+                  ✎
+                </button>
+              )}
+            </div>
+          )}
           <span
             style={{
               display: 'block',
@@ -119,7 +171,7 @@ export function MenuLeito({
                   }?`
                 : `Transferir ${paciente.nome} do leito ${leito?.nome ?? '—'} para o leito ${nomeDestino(
                     pendente.leitoId
-                  )}? O leito ${leito?.nome ?? ''} passa para “em limpeza”.`
+                  )}? O leito ${leito?.nome ?? ''} fica livre.`
             }
             onCancelar={() => setPendente(null)}
             onConfirmar={confirmar}

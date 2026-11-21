@@ -163,10 +163,18 @@ número.
 
 ### Regras de leito
 
-1. Leito ocupado não pode ser renomeado nem desativado — transfira a paciente antes.
-2. Desativar não é excluir: o leito sai da lista de admissão e continua no histórico.
-3. Transferência marca o leito de origem como "em limpeza" automaticamente.
-4. "Em limpeza" volta a "livre" pelo botão Liberar no mapa.
+1. **Renomear é permitido a qualquer momento**, inclusive com paciente no leito: a
+   referência é pelo id, a paciente não sai do lugar e só o rótulo muda. Em sessões
+   como alojamento conjunto, nomear os leitos é parte do trabalho. O lápis ao lado do
+   nome, dentro da caixa do leito, renomeia sem sair do quadro.
+2. **Desativar exige o leito vazio** — esse sim: um leito fora de serviço com paciente
+   dentro é contradição. Desativar não é excluir: o leito sai da lista de admissão e
+   continua no histórico.
+3. **Alta, óbito e transferência devolvem o leito como LIVRE**, pronto para a próxima
+   admissão. Segurar o leito depois da alta só atrapalha quem precisa internar alguém.
+4. "Em limpeza" continua existindo, mas é marcado **à mão** em Configurações › Leitos,
+   para quando o leito precisa mesmo ficar fora de uso por um tempo. A admissão mostra
+   um botão para liberar na hora.
 5. Admissão e transferência só **aceitam** leitos livres e ativos, mas **mostram
    todos**, com os indisponíveis desabilitados e o motivo ao lado ("A — Maria Clara
    S. Nunes", "J — em limpeza", "L — bloqueado"). Um leito que some da lista sem

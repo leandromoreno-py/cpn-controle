@@ -57,6 +57,7 @@ interface Ctx {
   reabrir(pacienteId: string, leitoId: string): void;
 
   salvarLeito(leito: Leito): void;
+  renomearLeito(leitoId: string, nome: string): void;
   liberarLeito(leitoId: string): void;
   salvarCategoria(categoria: Categoria): void;
   restaurarCoresPadrao(): void;
@@ -442,8 +443,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   }
                 : p
             ),
+            // O leito volta LIVRE, não "em limpeza": segurar o leito depois da
+            // alta só atrapalha quem precisa admitir a próxima paciente. Quem
+            // quiser marcar limpeza faz isso à mão em Configurações › Leitos.
             leitos: e.leitos.map((l) =>
-              l.id === paciente?.leitoId ? { ...l, status: 'limpeza' as const } : l
+              l.id === paciente?.leitoId ? { ...l, status: 'livre' as const } : l
             ),
           };
         },
@@ -496,9 +500,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 ? { ...p, leitoId: novoLeitoId, atualizadoEm: agoraIso() }
                 : p
             ),
-            // Transferência libera o leito de origem marcando-o "em limpeza".
+            // A transferência libera o leito de origem de imediato.
             leitos: e.leitos.map((l) => {
-              if (l.id === antigo) return { ...l, status: 'limpeza' as const };
+              if (l.id === antigo) return { ...l, status: 'livre' as const };
               if (l.id === novoLeitoId) return { ...l, status: 'ocupado' as const };
               return l;
             }),
@@ -536,7 +540,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ),
             // Nada é excluído: o leito só volta a ficar disponível.
             leitos: e.leitos.map((l) =>
-              l.id === paciente?.leitoId ? { ...l, status: 'limpeza' as const } : l
+              l.id === paciente?.leitoId ? { ...l, status: 'livre' as const } : l
             ),
           };
         },
@@ -578,6 +582,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }),
         auditar('alteracao_leito', { entidade: 'leito', valorNovo: leito.nome })
       );
+    },
+
+    /**
+     * Renomear é seguro mesmo com paciente no leito: a referência é pelo id, e
+     * a paciente não sai do lugar — só o rótulo muda. Em sessões como
+     * alojamento conjunto, nomear os leitos é parte do trabalho.
+     */
+    renomearLeito: (leitoId, nome) => {
+      const limpo = nome.trim();
+      if (!limpo) return;
+      mutar((e) => {
+        const antigo = e.leitos.find((l) => l.id === leitoId);
+        return {
+          ...e,
+          leitos: e.leitos.map((l) => (l.id === leitoId ? { ...l, nome: limpo } : l)),
+          auditoria: [
+            {
+              id: novoId('aud'),
+              timestamp: agoraIso(),
+              usuarioId: usuarioAtual.id,
+              usuarioNome: usuarioAtual.nome,
+              acao: 'alteracao_leito' as AcaoAuditoria,
+              entidade: 'leito',
+              campo: 'nome',
+              valorAnterior: antigo?.nome,
+              valorNovo: limpo,
+            },
+            ...e.auditoria,
+          ],
+        };
+      });
     },
 
     liberarLeito: (leitoId) => {

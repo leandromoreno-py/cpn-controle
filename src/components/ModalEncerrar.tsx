@@ -110,8 +110,8 @@ export function ModalEncerrar({
       rodape={
         <>
           <div style={{ flex: '1 1 240px', color: 'var(--text-dim)', fontSize: 11.5, lineHeight: 1.5 }}>
-            O leito {leito?.nome ?? ''} passa para “em limpeza” e a paciente vai para
-            Arquivadas, com todo o histórico.
+            O leito {leito?.nome ?? ''} fica livre e a paciente vai para Arquivadas, com
+            todo o histórico.
           </div>
           <div style={{ flex: '0 0 auto', display: 'flex', gap: 9 }}>
             <button type="button" className="btn" onClick={onFechar}>

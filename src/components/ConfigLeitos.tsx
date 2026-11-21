@@ -286,8 +286,6 @@ export function ConfigLeitos() {
                             className="btn"
                             style={{ height: 30, padding: '0 10px', fontSize: 11.5 }}
                             onClick={() => setEditando(l)}
-                            disabled={ocupado}
-                            title={ocupado ? 'Transfira a paciente antes de renomear' : undefined}
                           >
                             Renomear
                           </button>
@@ -324,8 +322,8 @@ export function ConfigLeitos() {
                 fontSize: 11.5,
               }}
             >
-              {leitos.length} leitos cadastrados · um leito ocupado não pode ser
-              renomeado nem desativado sem transferir a paciente antes.
+              {leitos.length} leitos cadastrados · renomear é permitido a qualquer momento;
+              desativar exige que o leito esteja vazio.
             </div>
           </section>
         </div>
@@ -463,9 +461,10 @@ function PainelLeito({
         </span>
       </label>
 
-      <Aviso tom="atencao" titulo="Transferência libera o leito">
-        Ao transferir uma paciente, o leito de origem passa automaticamente para “em
-        limpeza”, e volta a “livre” pelo botão Liberar no mapa.
+      <Aviso tom="atencao" titulo="Alta e transferência liberam o leito">
+        Dar alta ou transferir uma paciente devolve o leito como livre, pronto para a
+        próxima admissão. Marque “em limpeza” aqui quando o leito precisar de fato ficar
+        fora de uso por um tempo.
       </Aviso>
 
       <div style={{ display: 'flex', gap: 9, marginTop: 'auto' }}>
