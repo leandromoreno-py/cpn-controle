@@ -24,8 +24,13 @@ export function Sidebar({
   pagina: Pagina;
   irPara(p: Pagina): void;
 }) {
-  const { estado, usuarioAtual } = useApp();
-  const pendentes = estado.exames.filter((e) => !e.realizado).length;
+  const { estado, usuarioAtual, sessaoAtiva } = useApp();
+  const daSessao = new Set(
+    estado.pacientes.filter((p) => p.sessaoId === sessaoAtiva.id).map((p) => p.id)
+  );
+  const pendentes = estado.exames.filter(
+    (e) => !e.realizado && daSessao.has(e.pacienteId)
+  ).length;
 
   return (
     <nav

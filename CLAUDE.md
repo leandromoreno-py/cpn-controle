@@ -10,6 +10,7 @@ configuradas pela unidade. O banner no topo do app diz isso ao usuário.
 ## Estado atual
 
 Etapas 1 a 3 implementadas: quadro de pacientes, admissão, modal de controles,
+anamnese, edição de dados da paciente, encerramento de atendimento, sessões,
 configurações de leitos e categorias, exames, arquivadas e histórico de alterações.
 
 Persistência em `localStorage` por enquanto. A etapa 4 (Supabase) troca a
@@ -23,6 +24,26 @@ passagem de plantão, partograma, exportação CSV. Ver `docs/prompts-etapas.md`
 
 Estas foram discutidas e decididas. Se algo aqui parecer errado, pergunte antes de
 alterar: provavelmente existe um motivo clínico ou de legibilidade por trás.
+
+### Sessões
+
+Uma sessão é uma unidade de internação com seus **próprios leitos e pacientes**. O
+Centro de Parto é a primeira; o usuário cria outras pelas abas acima do quadro, com
+nome editável, e cada sessão nova nasce com o mesmo conjunto de leitos (A–L e três
+extras) e nenhuma paciente.
+
+Categorias, comorbidades, intervalos de controle e usuários são **compartilhados**
+entre todas as sessões — são configuração do serviço, não da unidade.
+
+Quadro, leitos, exames, arquivadas e admissão filtram sempre pela sessão ativa. A
+primeira sessão não pode ser excluída, para o app nunca ficar sem nenhuma. Excluir uma
+sessão apaga seus leitos e pacientes, e por isso pede confirmação dizendo quantas
+pacientes ativas serão perdidas.
+
+### A anamnese abre pelo chip do leito
+
+Clicar na letra do leito abre a anamnese — a descrição do caso em texto livre. O chip
+é o alvo mais rápido de acertar na linha, e ganha um marcador quando já existe texto.
 
 ### A linha do paciente tem DOIS NÍVEIS
 
@@ -65,6 +86,15 @@ que nenhuma escolha produza uma linha ilegível.
   desfecho — com horário e, para cesárea, a indicação.
 
 **Cesárea é desfecho, não status.** Quem cesariou passa a ser puérpera.
+
+Desfechos: parto normal, cesárea, aborto, alta sem desfecho obstétrico, transferida sem
+desfecho, óbito materno e óbito fetal. Óbito exige causa preenchida; transferência
+exige destino. Registrar o desfecho em **Encerrar atendimento** arquiva a paciente e
+devolve o leito como "em limpeza".
+
+**Natimorto** é registrado como óbito fetal, não como parto com RN. Se o serviço
+preferir registrar o parto e marcar o natimorto no bloco do RN, isso muda a modelagem —
+vale confirmar antes da etapa 4.
 
 ### Balanço hídrico e toque vaginal são blocos OPCIONAIS
 
@@ -121,6 +151,20 @@ Quando o responsável de um controle é trocado no popup, a auditoria guarda **a
 informações**: quem registrou e de qual conta foi lançado. Trocar o responsável não
 troca a sessão.
 
+### Onde cada edição acontece
+
+- **Chip do leito** → anamnese.
+- **Nome da paciente, botão da barra superior, ou menu ⋯** → editar nome, idade, IG,
+  situação (categoria), status, paridade, comorbidades, intervalo de controles e leito.
+- **Menu ⋯ → Encerrar atendimento** → alta, óbito, transferência; arquiva e libera o
+  leito.
+- **Configurações › Leitos** → cadastro, renome, status e o botão Liberar de um leito
+  em limpeza.
+
+A edição de dados **não** registra desfecho, e o encerramento **não** edita dados. A
+separação é deliberada: trocar a categoria de uma paciente é uma correção cadastral,
+registrar um óbito é um ato clínico com causa obrigatória e auditoria.
+
 ### Decisão em aberto
 
 No popup de responsável, qualquer usuário pode registrar em nome de outro. Se o
@@ -159,8 +203,15 @@ src/
   services/storage.ts  interface assíncrona; nenhum componente acessa o banco direto
   services/seed.ts     8 pacientes fictícias cobrindo as 4 categorias
   state/store.tsx      contexto, ações e gravação da auditoria
-  components/          Sidebar, QuadroPacientes, LinhaPaciente, modais, configs
+  components/          Sidebar, AbasSessoes, QuadroPacientes, LinhaPaciente,
+                       ModalAdmissao, ModalControles, ModalAnamnese,
+                       ModalEditarPaciente, ModalEncerrar, ConfigLeitos,
+                       ConfigCategorias
 ```
+
+O estado salvo no navegador é versionado (`cpn-controle:estado:v2`), e
+`storage.ts` migra a versão anterior em vez de descartá-la. Ao acrescentar um campo
+obrigatório, acrescente também a migração.
 
 Regra que não deve ser quebrada: **componente nenhum fala com `localStorage` ou com o
 Supabase diretamente.** Tudo passa por `src/services/storage.ts`. É o que vai permitir

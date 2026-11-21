@@ -39,8 +39,14 @@ const TIPO_LABEL: Record<TipoLeito, string> = {
 };
 
 export function ConfigLeitos() {
-  const { estado, salvarLeito, liberarLeito } = useApp();
+  const { estado, salvarLeito, liberarLeito, sessaoAtiva } = useApp();
   const [editando, setEditando] = useState<Leito | null>(null);
+
+  // Cada sessão tem o seu próprio conjunto de leitos.
+  const leitos = useMemo(
+    () => estado.leitos.filter((l) => l.sessaoId === sessaoAtiva.id),
+    [estado.leitos, sessaoAtiva.id]
+  );
 
   const ocupantes = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -52,12 +58,13 @@ export function ConfigLeitos() {
 
   const contagem = useMemo(() => {
     const c: Record<StatusLeito, number> = { ocupado: 0, livre: 0, limpeza: 0, bloqueado: 0 };
-    for (const l of estado.leitos) c[l.status]++;
+    for (const l of leitos) c[l.status]++;
     return c;
-  }, [estado.leitos]);
+  }, [leitos]);
 
   const novo = (): Leito => ({
     id: novoId('leito'),
+    sessaoId: sessaoAtiva.id,
     nome: '',
     tipo: 'personalizado',
     status: 'livre',
@@ -80,7 +87,7 @@ export function ConfigLeitos() {
             Configurações › Leitos
           </div>
           <h1 style={{ margin: 0, fontSize: 21, fontWeight: 700, letterSpacing: -0.3 }}>
-            Leitos do centro de parto
+            Leitos · {sessaoAtiva.nome}
           </h1>
           <p style={{ margin: '6px 0 0', color: 'var(--text-dim)', fontSize: 12.5, maxWidth: 620 }}>
             Leitos fixos A a L e três extras já vêm cadastrados. Qualquer leito pode ser
@@ -124,7 +131,7 @@ export function ConfigLeitos() {
                 gap: 10,
               }}
             >
-              {estado.leitos.map((l) => {
+              {leitos.map((l) => {
                 const e = ESTILO[l.status];
                 const ocupante = ocupantes.get(l.id);
                 return (
@@ -220,7 +227,7 @@ export function ConfigLeitos() {
                   </tr>
                 </thead>
                 <tbody>
-                  {estado.leitos.map((l) => {
+                  {leitos.map((l) => {
                     const e = ESTILO[l.status];
                     const ocupado = l.status === 'ocupado';
                     return (
@@ -317,7 +324,7 @@ export function ConfigLeitos() {
                 fontSize: 11.5,
               }}
             >
-              {estado.leitos.length} leitos cadastrados · um leito ocupado não pode ser
+              {leitos.length} leitos cadastrados · um leito ocupado não pode ser
               renomeado nem desativado sem transferir a paciente antes.
             </div>
           </section>

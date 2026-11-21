@@ -12,13 +12,16 @@ import type {
   AcaoAuditoria,
   Categoria,
   Controle,
+  Desfecho,
   EstadoApp,
   ExameProgramacao,
   Leito,
   Paciente,
+  Sessao,
   Usuario,
 } from '../types';
 import { obterStorage, supabaseConfigurado, type Backend } from '../services/storage';
+import { leitosPadrao } from '../services/seed';
 import { agoraIso, novoId } from '../lib/calc';
 
 export type Tema = 'claro' | 'escuro';
@@ -33,12 +36,20 @@ interface Ctx {
   usuarioAtual: Usuario;
   definirUsuarioAtual(id: string): void;
 
+  sessaoAtiva: Sessao;
+  definirSessaoAtiva(id: string): void;
+  criarSessao(nome: string): void;
+  renomearSessao(id: string, nome: string): void;
+  excluirSessao(id: string): void;
+
   admitir(dados: {
     paciente: Omit<Paciente, 'id' | 'criadoEm' | 'atualizadoEm' | 'arquivada'>;
     controleInicial?: Partial<Controle>;
     exames?: { texto: string; horarioProgramado?: string }[];
   }): void;
   atualizarPaciente(id: string, mudancas: Partial<Paciente>, campo?: string): void;
+  salvarAnamnese(pacienteId: string, texto: string): void;
+  encerrarAtendimento(pacienteId: string, desfecho: Desfecho): void;
   registrarControle(controle: Omit<Controle, 'id'>): void;
   transferirLeito(pacienteId: string, novoLeitoId: string): void;
   arquivar(pacienteId: string, motivo: 'alta' | 'transferida', destino?: string): void;
@@ -63,6 +74,7 @@ export function useApp(): Ctx {
 
 const CHAVE_TEMA = 'cpn-controle:tema';
 const CHAVE_USUARIO = 'cpn-controle:usuario';
+const CHAVE_SESSAO = 'cpn-controle:sessao';
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const storage = useMemo(() => obterStorage(), []);
@@ -72,6 +84,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
   const [usuarioId, setUsuarioId] = useState<string>(
     () => localStorage.getItem(CHAVE_USUARIO) ?? ''
+  );
+  const [sessaoId, setSessaoId] = useState<string>(
+    () => localStorage.getItem(CHAVE_SESSAO) ?? ''
   );
   // Evita gravar de volta o estado que acabou de chegar de outro cliente.
   const vindoDeFora = useRef(false);
@@ -107,6 +122,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     document.documentElement.dataset.theme = tema;
     localStorage.setItem(CHAVE_TEMA, tema);
   }, [tema]);
+
+  const sessaoAtiva: Sessao = useMemo(() => {
+    const achada = estado?.sessoes.find((x) => x.id === sessaoId);
+    return (
+      achada ??
+      estado?.sessoes[0] ?? {
+        id: 'sessao_vazia',
+        nome: 'Centro de Parto',
+        ordem: 1,
+        criadaEm: agoraIso(),
+      }
+    );
+  }, [estado, sessaoId]);
 
   const usuarioAtual: Usuario = useMemo(() => {
     const achado = estado?.usuarios.find((u) => u.id === usuarioId);
@@ -160,6 +188,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     backend: storage.backend,
     multiusuario: supabaseConfigurado(),
     estado: estado ?? {
+      sessoes: [],
       categorias: [],
       leitos: [],
       pacientes: [],
@@ -176,6 +205,72 @@ export function AppProvider({ children }: { children: ReactNode }) {
     definirUsuarioAtual: (id) => {
       setUsuarioId(id);
       localStorage.setItem(CHAVE_USUARIO, id);
+    },
+
+    sessaoAtiva,
+    definirSessaoAtiva: (id) => {
+      setSessaoId(id);
+      localStorage.setItem(CHAVE_SESSAO, id);
+    },
+
+    // Uma sessão nova nasce com o mesmo conjunto de leitos do Centro de Parto
+    // (A–L e três extras) e sem pacientes. Categorias, comorbidades e usuários
+    // são compartilhados entre todas.
+    criarSessao: (nome) => {
+      const nova: Sessao = {
+        id: novoId('sessao'),
+        nome: nome.trim() || 'Nova sessão',
+        ordem: (estado?.sessoes.length ?? 0) + 1,
+        criadaEm: agoraIso(),
+      };
+      mutar(
+        (e) => ({
+          ...e,
+          sessoes: [...e.sessoes, nova],
+          leitos: [...e.leitos, ...leitosPadrao(nova.id)],
+        }),
+        auditar('alteracao_sessao', { entidade: 'sessao', valorNovo: nova.nome })
+      );
+      setSessaoId(nova.id);
+      localStorage.setItem(CHAVE_SESSAO, nova.id);
+    },
+
+    renomearSessao: (id, nome) => {
+      mutar(
+        (e) => ({
+          ...e,
+          sessoes: e.sessoes.map((x) => (x.id === id ? { ...x, nome: nome.trim() || x.nome } : x)),
+        }),
+        auditar('alteracao_sessao', { entidade: 'sessao', campo: 'nome', valorNovo: nome })
+      );
+    },
+
+    // Excluir remove a sessão, seus leitos e tudo que pertencia a ela. A
+    // primeira sessão nunca é removida, para o app não ficar sem nenhuma.
+    excluirSessao: (id) => {
+      mutar(
+        (e) => {
+          if (e.sessoes.length <= 1) return e;
+          const pacientesDaSessao = new Set(
+            e.pacientes.filter((p) => p.sessaoId === id).map((p) => p.id)
+          );
+          return {
+            ...e,
+            sessoes: e.sessoes.filter((x) => x.id !== id),
+            leitos: e.leitos.filter((l) => l.sessaoId !== id),
+            pacientes: e.pacientes.filter((p) => p.sessaoId !== id),
+            controles: e.controles.filter((c) => !pacientesDaSessao.has(c.pacienteId)),
+            medicacoes: e.medicacoes.filter((m) => !pacientesDaSessao.has(m.pacienteId)),
+            exames: e.exames.filter((x) => !pacientesDaSessao.has(x.pacienteId)),
+          };
+        },
+        auditar('alteracao_sessao', { entidade: 'sessao', campo: 'exclusao', valorNovo: id })
+      );
+      const restante = estado?.sessoes.find((x) => x.id !== id);
+      if (restante) {
+        setSessaoId(restante.id);
+        localStorage.setItem(CHAVE_SESSAO, restante.id);
+      }
     },
 
     admitir: ({ paciente, controleInicial, exames }) => {
@@ -254,6 +349,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ],
         };
       });
+    },
+
+    salvarAnamnese: (pacienteId, texto) => {
+      mutar(
+        (e) => ({
+          ...e,
+          pacientes: e.pacientes.map((p) =>
+            p.id === pacienteId
+              ? {
+                  ...p,
+                  anamnese: texto,
+                  atualizadoEm: agoraIso(),
+                  atualizadoPor: usuarioAtual.nome,
+                }
+              : p
+          ),
+        }),
+        auditar('anamnese', { pacienteId, campo: 'anamnese' })
+      );
+    },
+
+    /**
+     * Encerra o atendimento: grava o desfecho, arquiva a paciente e devolve o
+     * leito. Nada é excluído — o histórico inteiro continua e a paciente pode
+     * ser reaberta pela página Arquivadas.
+     */
+    encerrarAtendimento: (pacienteId, desfecho) => {
+      const status =
+        desfecho.tipo === 'obito_materno'
+          ? ('obito' as const)
+          : desfecho.tipo === 'transferida_sem_desfecho'
+            ? ('transferida' as const)
+            : ('alta' as const);
+      mutar(
+        (e) => {
+          const paciente = e.pacientes.find((p) => p.id === pacienteId);
+          return {
+            ...e,
+            pacientes: e.pacientes.map((p) =>
+              p.id === pacienteId
+                ? {
+                    ...p,
+                    desfecho,
+                    status,
+                    arquivada: true,
+                    arquivadaEm: agoraIso(),
+                    leitoId: null,
+                    atualizadoEm: agoraIso(),
+                    atualizadoPor: usuarioAtual.nome,
+                  }
+                : p
+            ),
+            leitos: e.leitos.map((l) =>
+              l.id === paciente?.leitoId ? { ...l, status: 'limpeza' as const } : l
+            ),
+          };
+        },
+        auditar(desfecho.tipo === 'obito_materno' ? 'obito' : 'desfecho', {
+          pacienteId,
+          campo: desfecho.tipo,
+          valorNovo: desfecho.transferidaPara ?? desfecho.causa ?? desfecho.indicacao ?? '',
+        })
+      );
     },
 
     registrarControle: (controle) => {
@@ -389,7 +547,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             l.id === leitoId ? { ...l, status: 'livre' as const } : l
           ),
         }),
-        auditar('alteracao_leito', { entidade: 'leito', campo: 'status', valorNovo: 'livre' })
+        auditar('liberacao_leito', { entidade: 'leito', campo: 'status', valorNovo: 'livre' })
       );
     },
 

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Controle, Paciente } from '../types';
 import { DU_LABEL, STATUS_LABEL } from '../types';
 import { useApp } from '../state/store';
@@ -33,12 +33,17 @@ interface Vital {
 export function LinhaPaciente({
   paciente,
   onRegistrar,
-  onAbrirPaciente,
+  onAnamnese,
+  onEditar,
+  onEncerrar,
 }: {
   paciente: Paciente;
   onRegistrar(p: Paciente): void;
-  onAbrirPaciente(p: Paciente): void;
+  onAnamnese(p: Paciente): void;
+  onEditar(p: Paciente): void;
+  onEncerrar(p: Paciente): void;
 }) {
+  const [menuAberto, setMenuAberto] = useState(false);
   const { estado, tema, alternarExame } = useApp();
 
   const categoria = estado.categorias.find((c) => c.id === paciente.categoriaId);
@@ -82,13 +87,18 @@ export function LinhaPaciente({
       {/* NÍVEL 1 */}
       <div style={{ display: 'grid', gridTemplateColumns: COLUNAS, gap: 12, alignItems: 'center' }}>
         <div>
-          <span
+          <button
+            type="button"
+            onClick={() => onAnamnese(paciente)}
+            title="Abrir a anamnese"
+            aria-label={`Abrir a anamnese de ${paciente.nome}, leito ${leito?.nome ?? 'sem leito'}`}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              minWidth: 40,
-              height: 26,
+              gap: 5,
+              minWidth: 44,
+              height: 30,
               padding: '0 9px',
               borderRadius: 7,
               background: estilo.chipBg,
@@ -96,17 +106,24 @@ export function LinhaPaciente({
               color: estilo.texto,
               fontWeight: 700,
               fontSize: 13,
+              cursor: 'pointer',
             }}
           >
             {leito?.nome ?? '—'}
-          </span>
+            {paciente.anamnese?.trim() ? (
+              <span aria-hidden="true" style={{ fontSize: 10, opacity: 0.75 }}>
+                ▤
+              </span>
+            ) : null}
+          </button>
         </div>
 
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap' }}>
             <button
               type="button"
-              onClick={() => onAbrirPaciente(paciente)}
+              onClick={() => onEditar(paciente)}
+              title="Editar dados da paciente"
               style={{
                 border: 0,
                 background: 'transparent',
@@ -208,7 +225,7 @@ export function LinhaPaciente({
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, position: 'relative' }}>
           <button
             type="button"
             className="btn btn--icon"
@@ -221,12 +238,76 @@ export function LinhaPaciente({
           <button
             type="button"
             className="btn btn--icon"
-            onClick={() => onAbrirPaciente(paciente)}
+            onClick={() => setMenuAberto((v) => !v)}
             aria-label={`Mais ações para ${paciente.nome}`}
+            aria-expanded={menuAberto}
             title="Mais ações"
           >
             ⋯
           </button>
+
+          {menuAberto && (
+            <>
+              <div
+                role="presentation"
+                onClick={() => setMenuAberto(false)}
+                style={{ position: 'fixed', inset: 0, zIndex: 20 }}
+              />
+              <div
+                role="menu"
+                style={{
+                  position: 'absolute',
+                  top: 38,
+                  right: 0,
+                  zIndex: 21,
+                  minWidth: 210,
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 10,
+                  boxShadow: '0 12px 32px rgba(42,10,61,0.22)',
+                  padding: 5,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  textAlign: 'left',
+                }}
+              >
+                <ItemMenu
+                  onClick={() => {
+                    setMenuAberto(false);
+                    onAnamnese(paciente);
+                  }}
+                >
+                  Anamnese
+                </ItemMenu>
+                <ItemMenu
+                  onClick={() => {
+                    setMenuAberto(false);
+                    onEditar(paciente);
+                  }}
+                >
+                  Editar dados e leito
+                </ItemMenu>
+                <ItemMenu
+                  onClick={() => {
+                    setMenuAberto(false);
+                    onRegistrar(paciente);
+                  }}
+                >
+                  Registrar controles
+                </ItemMenu>
+                <div style={{ height: 1, background: 'var(--border)', margin: '4px 2px' }} />
+                <ItemMenu
+                  destaque
+                  onClick={() => {
+                    setMenuAberto(false);
+                    onEncerrar(paciente);
+                  }}
+                >
+                  Encerrar atendimento…
+                </ItemMenu>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -346,6 +427,40 @@ export function LinhaPaciente({
         </div>
       </div>
     </article>
+  );
+}
+
+function ItemMenu({
+  children,
+  onClick,
+  destaque = false,
+}: {
+  children: React.ReactNode;
+  onClick(): void;
+  destaque?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      style={{
+        border: 0,
+        background: 'transparent',
+        textAlign: 'left',
+        padding: '9px 10px',
+        minHeight: 38,
+        borderRadius: 7,
+        cursor: 'pointer',
+        fontSize: 12.5,
+        color: destaque ? 'var(--alert-text)' : 'var(--text)',
+        fontWeight: destaque ? 600 : 400,
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--row-hover)')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+    >
+      {children}
+    </button>
   );
 }
 

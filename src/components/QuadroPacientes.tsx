@@ -16,16 +16,20 @@ export function QuadroPacientes({
   categoriaFiltro,
   ordem,
   onRegistrar,
-  onAbrirPaciente,
+  onAnamnese,
+  onEditar,
+  onEncerrar,
 }: {
   busca: string;
   soAtrasadas: boolean;
   categoriaFiltro: string | null;
   ordem: Ordem;
   onRegistrar(p: Paciente): void;
-  onAbrirPaciente(p: Paciente): void;
+  onAnamnese(p: Paciente): void;
+  onEditar(p: Paciente): void;
+  onEncerrar(p: Paciente): void;
 }) {
-  const { estado, tema } = useApp();
+  const { estado, tema, sessaoAtiva } = useApp();
   const [mostrarAltas, setMostrarAltas] = useState(false);
 
   const superficie = tema === 'escuro' ? '#1E1228' : '#FFFFFF';
@@ -35,7 +39,8 @@ export function QuadroPacientes({
     const nomeLeito = (p: Paciente) =>
       estado.leitos.find((l) => l.id === p.leitoId)?.nome.toLowerCase() ?? '';
 
-    let lista = estado.pacientes.filter((p) => !p.arquivada);
+    // O quadro mostra apenas a sessão ativa.
+    let lista = estado.pacientes.filter((p) => !p.arquivada && p.sessaoId === sessaoAtiva.id);
 
     if (termo) {
       lista = lista.filter(
@@ -68,18 +73,20 @@ export function QuadroPacientes({
       });
     }
     return copia;
-  }, [busca, categoriaFiltro, soAtrasadas, ordem, estado]);
+  }, [busca, categoriaFiltro, soAtrasadas, ordem, estado, sessaoAtiva.id]);
 
   const arquivadas24h = estado.pacientes.filter(
     (p) =>
       p.arquivada &&
+      p.sessaoId === sessaoAtiva.id &&
       p.arquivadaEm != null &&
       Date.now() - new Date(p.arquivadaEm).getTime() < 86_400_000
   );
 
-  const livres = estado.leitos.filter((l) => l.status === 'livre' && l.ativo).length;
-  const limpeza = estado.leitos.filter((l) => l.status === 'limpeza').length;
-  const ocupados = estado.leitos.filter((l) => l.status === 'ocupado').length;
+  const daSessao = estado.leitos.filter((l) => l.sessaoId === sessaoAtiva.id);
+  const livres = daSessao.filter((l) => l.status === 'livre' && l.ativo).length;
+  const limpeza = daSessao.filter((l) => l.status === 'limpeza').length;
+  const ocupados = daSessao.filter((l) => l.status === 'ocupado').length;
 
   return (
     <div style={{ padding: '12px 24px 28px' }}>
@@ -144,7 +151,7 @@ export function QuadroPacientes({
 
         {ativas.length === 0 && (
           <p style={{ padding: 24, margin: 0, color: 'var(--text-dim)' }}>
-            Nenhuma paciente corresponde aos filtros.
+            Nenhuma paciente em {sessaoAtiva.nome} corresponde aos filtros.
           </p>
         )}
 
@@ -153,7 +160,9 @@ export function QuadroPacientes({
             key={p.id}
             paciente={p}
             onRegistrar={onRegistrar}
-            onAbrirPaciente={onAbrirPaciente}
+            onAnamnese={onAnamnese}
+            onEditar={onEditar}
+            onEncerrar={onEncerrar}
           />
         ))}
       </div>

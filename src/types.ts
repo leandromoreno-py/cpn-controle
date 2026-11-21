@@ -2,6 +2,20 @@
 // Regra central: `categoria` é a identidade visual (cor da linha) e `status`
 // é o momento do fluxo. Cesárea é DESFECHO, não status. Ver CLAUDE.md.
 
+export type SessaoId = string;
+
+/**
+ * Uma sessão é uma unidade de internação com seu próprio conjunto de leitos e
+ * pacientes — o Centro de Parto é a primeira, e o usuário pode criar outras
+ * (alojamento conjunto, triagem, enfermaria) com o mesmo quadro.
+ */
+export interface Sessao {
+  id: SessaoId;
+  nome: string;
+  ordem: number;
+  criadaEm: string;
+}
+
 export type CategoriaId = string;
 
 export interface Categoria {
@@ -17,6 +31,7 @@ export type TipoLeito = 'fixo' | 'extra' | 'personalizado';
 
 export interface Leito {
   id: string;
+  sessaoId: SessaoId;
   nome: string;
   tipo: TipoLeito;
   status: StatusLeito;
@@ -30,12 +45,16 @@ export type StatusPaciente =
   | 'centro_cirurgico'
   | 'puerpera'
   | 'alta'
-  | 'transferida';
+  | 'transferida'
+  | 'obito';
 
 export type TipoDesfecho =
   | 'parto_normal'
   | 'cesarea'
   | 'aborto'
+  | 'obito_materno'
+  | 'obito_fetal'
+  | 'alta_sem_desfecho'
   | 'transferida_sem_desfecho';
 
 export interface Desfecho {
@@ -44,6 +63,7 @@ export interface Desfecho {
   indicacao?: string; // cesárea
   transferidaPara?: string;
   motivo?: string;
+  causa?: string; // óbito materno ou fetal
   rn?: {
     sexo?: 'F' | 'M' | 'indeterminado';
     pesoGramas?: number;
@@ -125,6 +145,7 @@ export interface ExameProgramacao {
 
 export interface Paciente {
   id: string;
+  sessaoId: SessaoId;
   leitoId: string | null;
   nome: string;
   idade?: number;
@@ -143,6 +164,8 @@ export interface Paciente {
   dinamicaUterina?: DinamicaUterina;
   intervaloControleMin: number;
   observacoes?: string;
+  /** Descrição do caso em texto livre, aberta pelo chip do leito. */
+  anamnese?: string;
   arquivada: boolean;
   arquivadaEm?: string;
   criadoEm: string;
@@ -163,7 +186,11 @@ export type AcaoAuditoria =
   | 'arquivamento'
   | 'reabertura'
   | 'alteracao_leito'
-  | 'alteracao_categoria';
+  | 'alteracao_categoria'
+  | 'anamnese'
+  | 'obito'
+  | 'liberacao_leito'
+  | 'alteracao_sessao';
 
 export interface RegistroAuditoria {
   id: string;
@@ -205,6 +232,7 @@ export interface Config {
 }
 
 export interface EstadoApp {
+  sessoes: Sessao[];
   categorias: Categoria[];
   leitos: Leito[];
   pacientes: Paciente[];
@@ -227,6 +255,16 @@ export const FUNCAO_LABEL: Record<FuncaoUsuario, string> = {
   outra: 'Outra',
 };
 
+export const DESFECHO_LABEL: Record<TipoDesfecho, string> = {
+  parto_normal: 'Parto normal',
+  cesarea: 'Cesárea',
+  aborto: 'Aborto',
+  obito_materno: 'Óbito materno',
+  obito_fetal: 'Óbito fetal',
+  alta_sem_desfecho: 'Alta sem desfecho obstétrico',
+  transferida_sem_desfecho: 'Transferida sem desfecho',
+};
+
 export const STATUS_LABEL: Record<StatusPaciente, string> = {
   internada: 'Internada',
   trabalho_de_parto: 'Em trabalho de parto',
@@ -234,6 +272,7 @@ export const STATUS_LABEL: Record<StatusPaciente, string> = {
   puerpera: 'Puérpera',
   alta: 'Alta',
   transferida: 'Transferida',
+  obito: 'Óbito',
 };
 
 export const STATUS_LEITO_LABEL: Record<StatusLeito, string> = {

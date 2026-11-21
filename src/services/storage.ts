@@ -8,7 +8,7 @@
 // um quadro por navegador, sem multiusuário. Útil para demonstrar.
 
 import type { EstadoApp } from '../types';
-import { estadoInicial } from './seed';
+import { SESSAO_PADRAO, estadoInicial } from './seed';
 
 export type Backend = 'local' | 'supabase';
 
@@ -20,7 +20,31 @@ export interface Storage {
   inscrever?(aoMudar: (estado: EstadoApp) => void): () => void;
 }
 
-const CHAVE = 'cpn-controle:estado:v1';
+const CHAVE = 'cpn-controle:estado:v2';
+const CHAVE_V1 = 'cpn-controle:estado:v1';
+
+/**
+ * Antes das sessões, leitos e pacientes não tinham `sessaoId`. Quem já abriu o
+ * app em v1 mantém os dados: tudo passa a pertencer à sessão inicial.
+ */
+function migrarV1(bruto: string): EstadoApp | null {
+  try {
+    const antigo = JSON.parse(bruto) as EstadoApp;
+    if (!antigo?.pacientes) return null;
+    const sessaoId = SESSAO_PADRAO.id;
+    return {
+      ...antigo,
+      sessoes: antigo.sessoes?.length ? antigo.sessoes : [SESSAO_PADRAO],
+      leitos: (antigo.leitos ?? []).map((l) => ({ ...l, sessaoId: l.sessaoId ?? sessaoId })),
+      pacientes: (antigo.pacientes ?? []).map((p) => ({
+        ...p,
+        sessaoId: p.sessaoId ?? sessaoId,
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
 
 class StorageLocal implements Storage {
   readonly backend = 'local' as const;
@@ -28,7 +52,20 @@ class StorageLocal implements Storage {
   async carregar(): Promise<EstadoApp> {
     try {
       const bruto = localStorage.getItem(CHAVE);
-      if (bruto) return JSON.parse(bruto) as EstadoApp;
+      if (bruto) {
+        const estado = JSON.parse(bruto) as EstadoApp;
+        // Um estado salvo antes de um campo novo existir não deve quebrar o app.
+        if (!estado.sessoes?.length) estado.sessoes = [SESSAO_PADRAO];
+        return estado;
+      }
+      const antigo = localStorage.getItem(CHAVE_V1);
+      if (antigo) {
+        const migrado = migrarV1(antigo);
+        if (migrado) {
+          await this.salvar(migrado);
+          return migrado;
+        }
+      }
     } catch {
       // Dado corrompido no navegador: recomeça do seed em vez de quebrar.
     }

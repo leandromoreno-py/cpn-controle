@@ -2,7 +2,7 @@
 // Nunca substitua por dados reais de paciente enquanto o app não tiver
 // autenticação e banco próprios configurados pela unidade.
 
-import type { EstadoApp, Leito } from '../types';
+import type { EstadoApp, Leito, Sessao } from '../types';
 import { isoComHora } from '../lib/calc';
 
 const hoje = new Date();
@@ -35,16 +35,27 @@ export const COMORBIDADES_PADRAO = [
 
 const LETRAS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
-function leitosPadrao(): Leito[] {
+/** Sessão inicial. O usuário pode renomeá-la e criar outras. */
+export const SESSAO_PADRAO: Sessao = {
+  id: 'sessao_cpn',
+  nome: 'Centro de Parto',
+  ordem: 1,
+  criadaEm: new Date().toISOString(),
+};
+
+/** Conjunto de leitos de uma sessão nova: fixos A–L e três extras. */
+export function leitosPadrao(sessaoId: string, prefixo = 'leito'): Leito[] {
   const fixos: Leito[] = LETRAS.map((l) => ({
-    id: `leito_${l}`,
+    id: `${prefixo}_${sessaoId}_${l}`,
+    sessaoId,
     nome: l,
     tipo: 'fixo',
     status: 'livre',
     ativo: true,
   }));
   const extras: Leito[] = [1, 2, 3].map((n) => ({
-    id: `leito_extra_${n}`,
+    id: `${prefixo}_${sessaoId}_extra_${n}`,
+    sessaoId,
     nome: `Extra ${n}`,
     tipo: 'extra',
     status: 'livre',
@@ -54,7 +65,8 @@ function leitosPadrao(): Leito[] {
 }
 
 export function estadoInicial(): EstadoApp {
-  const leitos = leitosPadrao();
+  const sessaoId = SESSAO_PADRAO.id;
+  const leitos = leitosPadrao(sessaoId);
   const ocupar = (nome: string) => {
     const l = leitos.find((x) => x.nome === nome)!;
     l.status = 'ocupado';
@@ -92,6 +104,7 @@ export function estadoInicial(): EstadoApp {
   ];
 
   const base = {
+    sessaoId,
     comorbidades: [] as string[],
     arquivada: false,
     criadoEm: diasAtras(1),
@@ -114,6 +127,10 @@ export function estadoInicial(): EstadoApp {
       comorbidades: ['Hipertensão Gestacional'],
       dinamicaUterina: 'presente' as const,
       intervaloControleMin: 60,
+      anamnese:
+        'Admitida às 08:20 referindo contrações regulares desde as 05h, com perda de ' +
+        'líquido claro às 10:25. Pré-natal com 8 consultas. PA elevada desde 36s, em ' +
+        'acompanhamento, sem proteinúria. Nega sangramento. Movimentação fetal presente.',
     },
     {
       ...base,
@@ -498,6 +515,7 @@ export function estadoInicial(): EstadoApp {
   bloqueado.observacao = 'Manutenção elétrica';
 
   return {
+    sessoes: [SESSAO_PADRAO],
     categorias: CATEGORIAS_PADRAO,
     leitos,
     pacientes,

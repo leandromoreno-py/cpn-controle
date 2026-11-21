@@ -2,19 +2,31 @@ import { useMemo, useState } from 'react';
 import type { Paciente } from './types';
 import { useApp } from './state/store';
 import { Sidebar, iniciais, type Pagina } from './components/Sidebar';
+import { AbasSessoes } from './components/AbasSessoes';
 import { QuadroPacientes } from './components/QuadroPacientes';
 import { ModalAdmissao } from './components/ModalAdmissao';
 import { ModalControles } from './components/ModalControles';
+import { ModalAnamnese } from './components/ModalAnamnese';
+import { ModalEditarPaciente } from './components/ModalEditarPaciente';
+import { ModalEncerrar } from './components/ModalEncerrar';
 import { ConfigLeitos } from './components/ConfigLeitos';
 import { ConfigCategorias } from './components/ConfigCategorias';
 import { horaHM, situacaoControle } from './lib/calc';
-import { FUNCAO_LABEL, STATUS_LABEL } from './types';
+import { DESFECHO_LABEL, FUNCAO_LABEL, STATUS_LABEL } from './types';
 
 type Ordem = 'leito' | 'atraso' | 'categoria';
 
 export default function App() {
-  const { pronto, estado, tema, alternarTema, usuarioAtual, definirUsuarioAtual, multiusuario } =
-    useApp();
+  const {
+    pronto,
+    estado,
+    tema,
+    alternarTema,
+    usuarioAtual,
+    definirUsuarioAtual,
+    multiusuario,
+    sessaoAtiva,
+  } = useApp();
 
   const [pagina, setPagina] = useState<Pagina>('quadro');
   const [busca, setBusca] = useState('');
@@ -23,8 +35,14 @@ export default function App() {
   const [ordem, setOrdem] = useState<Ordem>('leito');
   const [admitindo, setAdmitindo] = useState(false);
   const [registrando, setRegistrando] = useState<Paciente | null>(null);
+  const [anamnese, setAnamnese] = useState<Paciente | null>(null);
+  const [editando, setEditando] = useState<Paciente | null>(null);
+  const [editorAberto, setEditorAberto] = useState(false);
+  const [encerrando, setEncerrando] = useState<Paciente | null>(null);
 
-  const ativas = estado.pacientes.filter((p) => !p.arquivada);
+  const ativas = estado.pacientes.filter(
+    (p) => !p.arquivada && p.sessaoId === sessaoAtiva.id
+  );
   const atrasadas = useMemo(
     () =>
       ativas.filter((p) => situacaoControle(p, estado.controles).estado === 'atrasado').length,
@@ -54,7 +72,7 @@ export default function App() {
         >
           <div style={{ flex: '0 0 auto' }}>
             <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, letterSpacing: -0.2 }}>
-              {pagina === 'quadro' ? 'Quadro de Pacientes' : titulo(pagina)}
+              {pagina === 'quadro' ? sessaoAtiva.nome : titulo(pagina)}
             </h1>
             <div style={{ color: 'var(--text-dim)', fontSize: 11, marginTop: 2 }}>
               {new Date().toLocaleDateString('pt-BR', {
@@ -187,6 +205,18 @@ export default function App() {
             >
               {tema === 'claro' ? '☾' : '☀'}
             </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setEditando(null);
+                setEditorAberto(true);
+              }}
+              disabled={ativas.length === 0}
+              title="Editar nome, idade, IG, situação e leito"
+            >
+              ✎ Editar paciente
+            </button>
             <button type="button" className="btn btn--primary" onClick={() => setAdmitindo(true)}>
               ✚ Admitir Paciente
             </button>
@@ -207,6 +237,8 @@ export default function App() {
             ' Modo local: os dados ficam neste navegador. Configure o Supabase para multiusuário.'}
         </div>
 
+        <AbasSessoes />
+
         {pagina === 'quadro' && (
           <QuadroPacientes
             busca={busca}
@@ -214,7 +246,12 @@ export default function App() {
             categoriaFiltro={categoriaFiltro}
             ordem={ordem}
             onRegistrar={setRegistrando}
-            onAbrirPaciente={setRegistrando}
+            onAnamnese={setAnamnese}
+            onEditar={(p) => {
+              setEditando(p);
+              setEditorAberto(true);
+            }}
+            onEncerrar={setEncerrando}
           />
         )}
         {pagina === 'leitos' && <ConfigLeitos />}
@@ -227,6 +264,29 @@ export default function App() {
       {admitindo && <ModalAdmissao onFechar={() => setAdmitindo(false)} />}
       {registrando && (
         <ModalControles paciente={registrando} onFechar={() => setRegistrando(null)} />
+      )}
+      {anamnese && (
+        <ModalAnamnese
+          paciente={anamnese}
+          onFechar={() => setAnamnese(null)}
+          onEditarDados={(p) => {
+            setAnamnese(null);
+            setEditando(p);
+            setEditorAberto(true);
+          }}
+        />
+      )}
+      {editorAberto && (
+        <ModalEditarPaciente
+          paciente={editando}
+          onFechar={() => {
+            setEditorAberto(false);
+            setEditando(null);
+          }}
+        />
+      )}
+      {encerrando && (
+        <ModalEncerrar paciente={encerrando} onFechar={() => setEncerrando(null)} />
       )}
     </div>
   );
@@ -245,9 +305,12 @@ function titulo(p: Pagina): string {
 }
 
 function PaginaExames() {
-  const { estado, alternarExame } = useApp();
+  const { estado, alternarExame, sessaoAtiva } = useApp();
+  const daSessao = new Set(
+    estado.pacientes.filter((p) => p.sessaoId === sessaoAtiva.id).map((p) => p.id)
+  );
   const pendentes = estado.exames
-    .filter((e) => !e.realizado)
+    .filter((e) => !e.realizado && daSessao.has(e.pacienteId))
     .sort((a, b) => (a.horarioProgramado ?? '99:99').localeCompare(b.horarioProgramado ?? '99:99'));
 
   return (
@@ -302,9 +365,13 @@ function PaginaExames() {
 }
 
 function PaginaArquivadas() {
-  const { estado, reabrir } = useApp();
-  const arquivadas = estado.pacientes.filter((p) => p.arquivada);
-  const livres = estado.leitos.filter((l) => l.status === 'livre' && l.ativo);
+  const { estado, reabrir, sessaoAtiva } = useApp();
+  const arquivadas = estado.pacientes.filter(
+    (p) => p.arquivada && p.sessaoId === sessaoAtiva.id
+  );
+  const livres = estado.leitos.filter(
+    (l) => l.sessaoId === sessaoAtiva.id && l.status === 'livre' && l.ativo
+  );
 
   return (
     <div style={{ padding: '20px 24px 36px', maxWidth: 900 }}>
@@ -316,7 +383,7 @@ function PaginaArquivadas() {
       <div className="card" style={{ padding: 4 }}>
         {arquivadas.length === 0 && (
           <p style={{ padding: 20, margin: 0, color: 'var(--text-dim)' }}>
-            Nenhuma paciente arquivada.
+            Nenhuma paciente arquivada em {sessaoAtiva.nome}.
           </p>
         )}
         {arquivadas.map((p) => (
@@ -334,8 +401,9 @@ function PaginaArquivadas() {
             <span style={{ flex: '1 1 220px', minWidth: 0 }}>
               <strong>{p.nome}</strong>
               <span style={{ display: 'block', color: 'var(--text-dim)', fontSize: 11.5 }}>
-                {STATUS_LABEL[p.status]}
+                {p.desfecho ? DESFECHO_LABEL[p.desfecho.tipo] : STATUS_LABEL[p.status]}
                 {p.desfecho?.transferidaPara ? ` para ${p.desfecho.transferidaPara}` : ''}
+                {p.desfecho?.causa ? ` · ${p.desfecho.causa}` : ''}
                 {p.arquivadaEm ? ` · ${horaHM(p.arquivadaEm)}` : ''}
               </span>
             </span>

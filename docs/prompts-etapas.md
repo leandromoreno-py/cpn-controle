@@ -37,7 +37,9 @@ preencha o `.env` a partir do `.env.example`.
 > - Auditoria gravada no banco em toda alteração, com a aba de histórico lendo de lá.
 >   Quando o responsável do controle foi trocado no popup, grave as duas informações.
 >
-> Mapeie os nomes: o banco usa snake_case, o app usa camelCase.
+> Mapeie os nomes: o banco usa snake_case, o app usa camelCase. Lembre que leitos e
+> pacientes pertencem a uma sessão (`sessao_id`), e que o nome do leito é único dentro
+> da sessão, não no serviço inteiro.
 
 **Verifique:** entrar com dois usuários em abas separadas e editar a mesma paciente
 deve mostrar o aviso de conflito; registrar um controle numa aba deve atualizar a outra
@@ -45,9 +47,10 @@ sem recarregar; o histórico deve mostrar autor e horário corretos.
 
 ---
 
-## Etapa 5a — Medicações e desfecho
+## Etapa 5a — Medicações
 
-> Implemente a gestão de medicações pela interface e o fluxo de desfecho.
+> Implemente a gestão de medicações pela interface. O fluxo de desfecho já existe em
+> ModalEncerrar — não refaça.
 >
 > Medicações: painel por paciente com nome, apresentação, dose, via, vazão em mL/h,
 > início, intervalo, próxima dose calculada, responsável e status (em curso, suspensa,
@@ -56,14 +59,8 @@ sem recarregar; o histórico deve mostrar autor e horário corretos.
 > Antibiótico, Analgesia, Corticoide. Medicação com próxima dose vencida já aparece
 > destacada no chip da linha — mantenha esse comportamento.
 >
-> Desfecho: modal próprio com tipo (parto normal, cesárea, aborto, transferida sem
-> desfecho), data e hora, indicação para cesárea, e dados do RN quando houver (sexo,
-> peso em g, Apgar 1.º e 5.º minuto, destino). Para transferência, campo obrigatório
-> "Transferida para" com sugestões salvas, e motivo. Mudar o status de Gestante para
-> Puérpera atualiza a categoria automaticamente, com confirmação do usuário.
-
-**Verifique:** registrar uma cesárea deve mudar a categoria para puérpera mantendo
-`status` e `desfecho` como campos distintos.
+**Verifique:** uma medicação com próxima dose vencida deve aparecer em laranja no chip
+da linha.
 
 ---
 

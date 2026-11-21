@@ -11,6 +11,18 @@
 
 create extension if not exists "pgcrypto";
 
+-- ---------------------------------------------------------------- sessões
+-- Cada sessão é uma unidade de internação com seus próprios leitos e
+-- pacientes. Categorias, comorbidades e usuários são compartilhados.
+create table if not exists sessoes (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null,
+  ordem int not null default 0,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- ---------------------------------------------------------------- usuários
 create table if not exists usuarios (
   id uuid primary key default gen_random_uuid(),
@@ -41,7 +53,8 @@ create table if not exists categorias (
 -- ----------------------------------------------------------------- leitos
 create table if not exists leitos (
   id uuid primary key default gen_random_uuid(),
-  nome text not null unique,
+  sessao_id uuid not null references sessoes (id) on delete cascade,
+  nome text not null,
   tipo text not null default 'fixo' check (tipo in ('fixo', 'extra', 'personalizado')),
   status text not null default 'livre'
     check (status in ('livre', 'ocupado', 'limpeza', 'bloqueado')),
@@ -50,12 +63,15 @@ create table if not exists leitos (
   created_by uuid references usuarios (id),
   updated_by uuid references usuarios (id),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  -- o nome do leito é único dentro da sessão, não no serviço inteiro
+  unique (sessao_id, nome)
 );
 
 -- -------------------------------------------------------------- pacientes
 create table if not exists pacientes (
   id uuid primary key default gen_random_uuid(),
+  sessao_id uuid not null references sessoes (id) on delete cascade,
   leito_id uuid references leitos (id) on delete set null,
   nome text not null,
   data_nascimento date,
@@ -63,7 +79,7 @@ create table if not exists pacientes (
   categoria_id uuid not null references categorias (id),
   status text not null default 'internada'
     check (status in ('internada', 'trabalho_de_parto', 'centro_cirurgico',
-                      'puerpera', 'alta', 'transferida')),
+                      'puerpera', 'alta', 'transferida', 'obito')),
   -- desfecho: tipo, horário, indicação, destino e dados do RN
   desfecho jsonb,
   paridade_g int,
@@ -77,6 +93,8 @@ create table if not exists pacientes (
   dinamica_uterina text check (dinamica_uterina in ('ausente', 'esparsa', 'presente')),
   intervalo_controle_min int not null default 240,
   observacoes text,
+  -- descrição do caso em texto livre, aberta pelo chip do leito
+  anamnese text,
   arquivada boolean not null default false,
   arquivada_em timestamptz,
   motivo_arquivamento text,
@@ -87,7 +105,8 @@ create table if not exists pacientes (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists pacientes_ativas_idx on pacientes (arquivada, leito_id);
+create index if not exists pacientes_ativas_idx
+  on pacientes (sessao_id, arquivada, leito_id);
 
 -- -------------------------------------------------------------- controles
 create table if not exists controles (
@@ -185,7 +204,7 @@ $$ language plpgsql;
 do $$
 declare t text;
 begin
-  foreach t in array array['categorias', 'leitos', 'pacientes', 'medicacoes']
+  foreach t in array array['categorias', 'leitos', 'pacientes', 'medicacoes', 'sessoes']
   loop
     execute format(
       'drop trigger if exists %I_updated_at on %I;
@@ -197,6 +216,7 @@ begin
 end $$;
 
 -- ------------------------------------------------------------------- RLS
+alter table sessoes enable row level security;
 alter table usuarios enable row level security;
 alter table categorias enable row level security;
 alter table leitos enable row level security;
@@ -241,7 +261,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['leitos', 'categorias', 'usuarios', 'config']
+  foreach t in array array['leitos', 'categorias', 'usuarios', 'config', 'sessoes']
   loop
     execute format('drop policy if exists todos_leem on %I;', t);
     execute format(
@@ -268,6 +288,7 @@ alter publication supabase_realtime add table controles;
 alter publication supabase_realtime add table medicacoes;
 alter publication supabase_realtime add table exames_programacoes;
 alter publication supabase_realtime add table leitos;
+alter publication supabase_realtime add table sessoes;
 
 -- ------------------------------------------------------- seed mínimo
 insert into categorias (nome, cor, ordem, padrao) values
@@ -277,13 +298,21 @@ insert into categorias (nome, cor, ordem, padrao) values
   ('Não classificado', '#9CA3AF', 4, true)
 on conflict do nothing;
 
-insert into leitos (nome, tipo)
-select l, 'fixo' from unnest(array['A','B','C','D','E','F','G','H','I','J','K','L']) as l
-on conflict (nome) do nothing;
+insert into sessoes (nome, ordem) values ('Centro de Parto', 1)
+on conflict do nothing;
 
-insert into leitos (nome, tipo)
-select 'Extra ' || n, 'extra' from generate_series(1, 3) as n
-on conflict (nome) do nothing;
+insert into leitos (sessao_id, nome, tipo)
+select s.id, l, 'fixo'
+from sessoes s,
+     unnest(array['A','B','C','D','E','F','G','H','I','J','K','L']) as l
+where s.nome = 'Centro de Parto'
+on conflict (sessao_id, nome) do nothing;
+
+insert into leitos (sessao_id, nome, tipo)
+select s.id, 'Extra ' || n, 'extra'
+from sessoes s, generate_series(1, 3) as n
+where s.nome = 'Centro de Parto'
+on conflict (sessao_id, nome) do nothing;
 
 insert into config (chave, valor) values
   ('comorbidades', '["Hipertensão Gestacional","Pré-eclâmpsia","Diabetes Gestacional","DMG insulinizada","Trabalho de Parto Prematuro","RPMO","ITU","Anemia","Sífilis","HIV","Isoimunização Rh","Obesidade","Abortamento retido","Nenhuma"]'::jsonb),

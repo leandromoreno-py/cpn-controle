@@ -10,10 +10,12 @@ const num = (v: string): number | undefined =>
   v.trim() === '' ? undefined : Number(v.replace(',', '.'));
 
 export function ModalAdmissao({ onFechar }: { onFechar(): void }) {
-  const { estado, admitir, usuarioAtual } = useApp();
+  const { estado, admitir, usuarioAtual, sessaoAtiva } = useApp();
 
-  // Só leitos livres e ativos entram na lista.
-  const disponiveis = estado.leitos.filter((l) => l.status === 'livre' && l.ativo);
+  // Só leitos livres e ativos da sessão ativa entram na lista.
+  const disponiveis = estado.leitos.filter(
+    (l) => l.sessaoId === sessaoAtiva.id && l.status === 'livre' && l.ativo
+  );
 
   const [leitoId, setLeitoId] = useState(disponiveis[0]?.id ?? '');
   const [nome, setNome] = useState('');
@@ -53,6 +55,7 @@ export function ModalAdmissao({ onFechar }: { onFechar(): void }) {
     if (outraComorbidade.trim()) lista.push(outraComorbidade.trim());
 
     const paciente: Omit<Paciente, 'id' | 'criadoEm' | 'atualizadoEm' | 'arquivada'> = {
+      sessaoId: sessaoAtiva.id,
       leitoId,
       nome: nome.trim(),
       idade: num(idade),
@@ -100,7 +103,7 @@ export function ModalAdmissao({ onFechar }: { onFechar(): void }) {
       onFechar={onFechar}
       subtitulo={
         <p style={{ margin: 0, color: 'var(--color-plum-300)', fontSize: 11.5 }}>
-          Ambiente de demonstração — não insira dados reais de pacientes.
+          {sessaoAtiva.nome} · ambiente de demonstração — não insira dados reais.
         </p>
       }
       rodape={
