@@ -1,5 +1,9 @@
 -- CPN Controle — schema do Supabase (etapa 4)
 --
+-- Reexecutar este arquivo é seguro: tudo é "if not exists" ou "on conflict do
+-- nothing", e as colunas acrescentadas depois entram pelo bloco de migração no
+-- fim do arquivo.
+--
 -- Como aplicar: Supabase → SQL Editor → cole este arquivo inteiro → Run.
 -- Depois preencha VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no .env.
 --
@@ -40,7 +44,10 @@ create table if not exists usuarios (
 -- ------------------------------------------------------------- categorias
 create table if not exists categorias (
   id uuid primary key default gen_random_uuid(),
+  -- rótulo curto, que cabe no chip da linha (ex.: "O.F.")
   nome text not null,
+  -- nome por extenso, usado em títulos e confirmações
+  descricao text,
   cor text not null,
   ordem int not null default 0,
   padrao boolean not null default false,
@@ -149,6 +156,12 @@ create table if not exists medicacoes (
   inicio timestamptz,
   intervalo_min int,
   proxima_dose timestamptz,
+  ultima_dose_em timestamptz,
+  -- horários das doses efetivamente administradas, em ordem
+  doses_administradas timestamptz[] not null default '{}',
+  -- quantas doses o esquema prevê ao todo (betametasona: 2)
+  total_doses int,
+  observacao text,
   status text not null default 'em_curso'
     check (status in ('em_curso', 'suspensa', 'concluida')),
   created_by uuid references usuarios (id),
@@ -166,6 +179,11 @@ create table if not exists exames_programacoes (
   realizado boolean not null default false,
   realizado_em timestamptz,
   realizado_por uuid references usuarios (id),
+  -- o app guarda o NOME de quem marcou, que é o que a tela mostra
+  realizado_por_nome text,
+  -- sobrevive ao desmarcar: é o "últ. 14:32" de um exame que se repete
+  ultima_realizacao_em timestamptz,
+  ultima_realizacao_por text,
   created_by uuid references usuarios (id),
   created_at timestamptz not null default now()
 );
@@ -291,11 +309,12 @@ alter publication supabase_realtime add table leitos;
 alter publication supabase_realtime add table sessoes;
 
 -- ------------------------------------------------------- seed mínimo
-insert into categorias (nome, cor, ordem, padrao) values
-  ('Gestante',         '#2563EB', 1, true),
-  ('Puérpera',         '#C2185B', 2, true),
-  ('Aborto',           '#1F2937', 3, true),
-  ('Não classificado', '#9CA3AF', 4, true)
+insert into categorias (nome, descricao, cor, ordem, padrao) values
+  ('Gestante',         null,          '#2563EB', 1, true),
+  ('Puérpera',         null,          '#C2185B', 2, true),
+  ('O.F.',             'Óbito fetal', '#0F766E', 3, true),
+  ('Aborto',           null,          '#1F2937', 4, true),
+  ('Não classificado', null,          '#9CA3AF', 5, true)
 on conflict do nothing;
 
 insert into sessoes (nome, ordem) values ('Centro de Parto', 1)
@@ -319,3 +338,23 @@ insert into config (chave, valor) values
   ('intervalos_controle_min', '[60,120,240,360]'::jsonb),
   ('turnos', '["07:00","13:00","19:00","01:00"]'::jsonb)
 on conflict (chave) do nothing;
+
+
+-- ------------------------------------------------- migração de colunas
+-- Para quem já rodou uma versão anterior deste schema: acrescenta o que veio
+-- depois, sem tocar nos dados existentes.
+alter table categorias          add column if not exists descricao text;
+alter table pacientes           add column if not exists anamnese text;
+alter table exames_programacoes add column if not exists realizado_por_nome text;
+alter table exames_programacoes add column if not exists ultima_realizacao_em timestamptz;
+alter table exames_programacoes add column if not exists ultima_realizacao_por text;
+alter table medicacoes          add column if not exists ultima_dose_em timestamptz;
+alter table medicacoes          add column if not exists doses_administradas timestamptz[] not null default '{}';
+alter table medicacoes          add column if not exists total_doses int;
+alter table medicacoes          add column if not exists observacao text;
+
+-- O status 'obito' e os desfechos novos entraram depois da primeira versão.
+alter table pacientes drop constraint if exists pacientes_status_check;
+alter table pacientes add constraint pacientes_status_check
+  check (status in ('internada', 'trabalho_de_parto', 'centro_cirurgico',
+                    'puerpera', 'alta', 'transferida', 'obito'));

@@ -21,11 +21,23 @@ import type {
   Sessao,
   Usuario,
 } from '../types';
-import { obterStorage, supabaseConfigurado, type Backend } from '../services/storage';
+import { obterRepositorio, supabaseConfigurado, type Backend } from '../services/storage';
+import { ESTADO_VAZIO, persistirDiferencas } from '../services/repositorio';
+import {
+  acompanharPresenca,
+  aoMudarSessao,
+  entrarComSenha,
+  garantirUsuario,
+  sair as sairDoSupabase,
+  sessaoAtual as sessaoAuthAtual,
+} from '../services/supabase';
 import { leitosPadrao } from '../services/seed';
 import { agoraIso, novoId } from '../lib/calc';
 
 export type Tema = 'claro' | 'escuro';
+
+/** A sessão de autenticação do Supabase, ou nenhuma. */
+type SessaoAuth = Awaited<ReturnType<typeof sessaoAuthAtual>>;
 
 interface Ctx {
   pronto: boolean;
@@ -36,6 +48,16 @@ interface Ctx {
   alternarTema(): void;
   usuarioAtual: Usuario;
   definirUsuarioAtual(id: string): void;
+
+  /** Com Supabase ligado e ninguém autenticado, a tela de login assume. */
+  precisaLogin: boolean;
+  entrar(email: string, senha: string): Promise<void>;
+  sairDaConta(): Promise<void>;
+  /** Mensagem de falha de gravação, quando o banco recusa algo. */
+  erroGravacao: string | null;
+  limparErroGravacao(): void;
+  /** Nomes de quem está com o quadro aberto agora. */
+  presentes: string[];
 
   sessaoAtiva: Sessao;
   definirSessaoAtiva(id: string): void;
@@ -89,7 +111,8 @@ const CHAVE_USUARIO = 'cpn-controle:usuario';
 const CHAVE_SESSAO = 'cpn-controle:sessao';
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const storage = useMemo(() => obterStorage(), []);
+  const repo = useMemo(() => obterRepositorio(), []);
+  const multiusuario = supabaseConfigurado();
   const [estado, setEstado] = useState<EstadoApp | null>(null);
   const [tema, setTema] = useState<Tema>(
     () => (localStorage.getItem(CHAVE_TEMA) as Tema) ?? 'claro'
@@ -100,35 +123,87 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sessaoId, setSessaoId] = useState<string>(
     () => localStorage.getItem(CHAVE_SESSAO) ?? ''
   );
-  // Evita gravar de volta o estado que acabou de chegar de outro cliente.
-  const vindoDeFora = useRef(false);
+  // Último estado já gravado. O que for diferente dele é o que precisa ir ao
+  // banco — e o que chega de fora entra por aqui sem disparar nova gravação.
+  const persistido = useRef<EstadoApp | null>(null);
+  const [erroGravacao, setErroGravacao] = useState<string | null>(null);
+
+  const [sessaoAuth, setSessaoAuth] = useState<SessaoAuth>(null);
+  const [conferindoAuth, setConferindoAuth] = useState(multiusuario);
+  const [usuarioLogadoId, setUsuarioLogadoId] = useState<string | null>(null);
+  const [presentes, setPresentes] = useState<string[]>([]);
+
+  // Autenticação, só quando há Supabase configurado.
+  useEffect(() => {
+    if (!multiusuario) return;
+    let vivo = true;
+    void sessaoAuthAtual().then((s) => {
+      if (!vivo) return;
+      setSessaoAuth(s);
+      setConferindoAuth(false);
+    });
+    return aoMudarSessao((s) => {
+      setSessaoAuth(s);
+      setConferindoAuth(false);
+    });
+  }, [multiusuario]);
+
+  const autenticado = !multiusuario || sessaoAuth != null;
+
+  const recarregar = useCallback(async () => {
+    const novo = await repo.carregar();
+    persistido.current = novo;
+    setEstado(novo);
+  }, [repo]);
 
   useEffect(() => {
+    if (!autenticado) return;
     let vivo = true;
-    storage.carregar().then((e) => {
-      if (vivo) setEstado(e);
+    void repo
+      .carregar()
+      .then((e) => {
+        if (!vivo) return;
+        persistido.current = e;
+        setEstado(e);
+      })
+      .catch((erro: Error) => setErroGravacao(`Não foi possível carregar: ${erro.message}`));
+    return () => {
+      vivo = false;
+    };
+  }, [repo, autenticado]);
+
+  // O profissional logado vira (ou encontra) o registro em `usuarios`, para o
+  // nome aparecer na auditoria sem cadastro duplicado.
+  useEffect(() => {
+    if (!multiusuario || !sessaoAuth) return;
+    let vivo = true;
+    void garantirUsuario(sessaoAuth).then((u) => {
+      if (vivo && u) {
+        setUsuarioLogadoId(u.id);
+        void recarregar();
+      }
     });
     return () => {
       vivo = false;
     };
-  }, [storage]);
+  }, [multiusuario, sessaoAuth, recarregar]);
 
   useEffect(() => {
-    if (!storage.inscrever) return;
-    return storage.inscrever((e) => {
-      vindoDeFora.current = true;
-      setEstado(e);
+    if (!repo.inscrever || !autenticado) return;
+    return repo.inscrever(() => {
+      void recarregar();
     });
-  }, [storage]);
+  }, [repo, autenticado, recarregar]);
 
   useEffect(() => {
-    if (!estado) return;
-    if (vindoDeFora.current) {
-      vindoDeFora.current = false;
-      return;
-    }
-    void storage.salvar(estado);
-  }, [estado, storage]);
+    if (!estado || !persistido.current || estado === persistido.current) return;
+    const antes = persistido.current;
+    persistido.current = estado;
+    repo.salvarTudo?.(estado);
+    void persistirDiferencas(repo, antes, estado).catch((erro: Error) =>
+      setErroGravacao(`Não foi possível gravar: ${erro.message}`)
+    );
+  }, [estado, repo]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = tema;
@@ -149,7 +224,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [estado, sessaoId]);
 
   const usuarioAtual: Usuario = useMemo(() => {
-    const achado = estado?.usuarios.find((u) => u.id === usuarioId);
+    // Com login, quem registra é quem está autenticado — não há escolha.
+    const id = multiusuario ? usuarioLogadoId : usuarioId;
+    const achado = estado?.usuarios.find((u) => u.id === id);
     return (
       achado ??
       estado?.usuarios[0] ?? {
@@ -159,7 +236,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ativo: true,
       }
     );
-  }, [estado, usuarioId]);
+  }, [estado, usuarioId, usuarioLogadoId, multiusuario]);
+
+  useEffect(() => {
+    if (!multiusuario || !autenticado || !usuarioAtual.nome) return;
+    return acompanharPresenca(usuarioAtual.nome, setPresentes);
+    // Só o nome importa: reinscrever a cada render seria barulho no canal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiusuario, autenticado, usuarioAtual.nome]);
 
   const mutar = useCallback(
     (
@@ -197,20 +281,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const api: Ctx = {
     pronto: estado != null,
-    backend: storage.backend,
-    multiusuario: supabaseConfigurado(),
-    estado: estado ?? {
-      sessoes: [],
-      categorias: [],
-      leitos: [],
-      pacientes: [],
-      controles: [],
-      medicacoes: [],
-      exames: [],
-      usuarios: [],
-      auditoria: [],
-      config: { comorbidades: [], intervalosControleMin: [], turnos: [] },
+    backend: repo.backend,
+    multiusuario,
+    precisaLogin: multiusuario && !conferindoAuth && sessaoAuth == null,
+    entrar: async (email, senha) => {
+      await entrarComSenha(email, senha);
     },
+    sairDaConta: async () => {
+      await sairDoSupabase();
+      setUsuarioLogadoId(null);
+      setEstado(null);
+      persistido.current = null;
+    },
+    erroGravacao,
+    limparErroGravacao: () => setErroGravacao(null),
+    presentes,
+    estado: estado ?? ESTADO_VAZIO,
     tema,
     alternarTema: () => setTema((t) => (t === 'claro' ? 'escuro' : 'claro')),
     usuarioAtual,

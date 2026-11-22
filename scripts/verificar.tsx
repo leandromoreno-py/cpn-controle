@@ -6,6 +6,7 @@ import {
 import type { Medicacao } from '../src/types';
 import { estiloCategoria, contrastRatio, hexToRgb, mistura } from '../src/lib/contrast';
 import { estadoInicial } from '../src/services/seed';
+import { diferenca, persistirDiferencas } from '../src/services/repositorio';
 
 let falhas = 0;
 const ok = (nome: string, cond: boolean, obs = '') => {
@@ -174,6 +175,52 @@ for (const [nome, sup, dark] of temas) {
   }
 }
 
-console.log(falhas === 0 ? '\nTODOS OS TESTES PASSARAM' : `\n${falhas} FALHA(S)`);
+// --- gravação por registro (o que impede um usuário de apagar o do outro)
+const estadoA = estadoInicial();
+const estadoB = {
+  ...estadoA,
+  pacientes: estadoA.pacientes.map((p, i) => (i === 0 ? { ...p, nome: 'Outro Nome' } : p)),
+};
+const semUmPaciente = { ...estadoA, pacientes: estadoA.pacientes.slice(1) };
 
-process.exit(falhas === 0 ? 0 : 1);
+ok('diff acha 1 alterado', diferenca(estadoA.pacientes, estadoB.pacientes).alterados.length === 1);
+ok('diff não inventa remoção', diferenca(estadoA.pacientes, estadoB.pacientes).removidos.length === 0);
+ok('diff acha a remoção', diferenca(estadoA.pacientes, semUmPaciente.pacientes).removidos.length === 1);
+ok('listas iguais não geram diff', diferenca(estadoA.pacientes, estadoA.pacientes).alterados.length === 0);
+
+const chamadas: string[] = [];
+const repoFalso = {
+  backend: 'supabase' as const,
+  carregar: async () => estadoA,
+  salvarSessao: async () => { chamadas.push('sessao'); },
+  excluirSessao: async () => { chamadas.push('-sessao'); },
+  salvarCategoria: async () => { chamadas.push('categoria'); },
+  salvarLeito: async () => { chamadas.push('leito'); },
+  excluirLeito: async () => { chamadas.push('-leito'); },
+  salvarPaciente: async () => { chamadas.push('paciente'); },
+  excluirPaciente: async () => { chamadas.push('-paciente'); },
+  salvarControle: async () => { chamadas.push('controle'); },
+  salvarMedicacao: async () => { chamadas.push('medicacao'); },
+  excluirMedicacao: async () => { chamadas.push('-medicacao'); },
+  salvarExame: async () => { chamadas.push('exame'); },
+  excluirExame: async () => { chamadas.push('-exame'); },
+  salvarUsuario: async () => { chamadas.push('usuario'); },
+  registrarAuditoria: async () => { chamadas.push('auditoria'); },
+};
+
+async function testarPersistencia() {
+  await persistirDiferencas(repoFalso, estadoA, estadoB);
+  ok('grava só o registro alterado', chamadas.join(',') === 'paciente', chamadas.join(','));
+
+  chamadas.length = 0;
+  await persistirDiferencas(repoFalso, estadoA, estadoA);
+  ok('sem mudança, não grava nada', chamadas.length === 0, `${chamadas.length}`);
+
+  chamadas.length = 0;
+  await persistirDiferencas(repoFalso, estadoA, semUmPaciente);
+  ok('remoção vira exclusão', chamadas.includes('-paciente'), chamadas.join(','));
+
+  console.log(falhas === 0 ? '\nTODOS OS TESTES PASSARAM' : `\n${falhas} FALHA(S)`);
+  process.exit(falhas === 0 ? 0 : 1);
+}
+void testarPersistencia();

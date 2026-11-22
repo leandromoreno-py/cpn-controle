@@ -13,9 +13,9 @@ Etapas 1 a 3 implementadas: quadro de pacientes, admissão, modal de controles,
 anamnese, edição de dados da paciente, encerramento de atendimento, sessões,
 configurações de leitos e categorias, exames, arquivadas e histórico de alterações.
 
-Persistência em `localStorage` por enquanto. A etapa 4 (Supabase) troca a
-implementação dentro de `src/services/`, sem tocar nos componentes. O schema já está
-escrito em `supabase/schema.sql`.
+Etapa 4 (Supabase) **escrita, não testada contra um projeto real** — falta só a
+configuração, descrita no README. Sem as variáveis de ambiente o app roda em modo
+local, um quadro por navegador.
 
 Pendentes: passagem de plantão, partograma, exportação CSV. Ver
 `docs/prompts-etapas.md`.
@@ -312,7 +312,10 @@ Tipografia Inter, números com `tabular-nums` para alinhar as colunas de control
 src/
   lib/contrast.ts    luminância e contraste — cores editáveis com correção
   lib/calc.ts        IG, tempo relativo, débito urinário, balanço, alertas
-  services/storage.ts  interface assíncrona; nenhum componente acessa o banco direto
+  services/repositorio.ts  contrato + gravação por registro (diferenças)
+  services/local.ts        modo local
+  services/supabase.ts     banco, login, tempo real, presença
+  services/storage.ts      escolhe o backend
   services/seed.ts     8 pacientes fictícias cobrindo as 4 categorias
   state/store.tsx      contexto, ações e gravação da auditoria
   components/          Sidebar, AbasSessoes, QuadroPacientes, LinhaPaciente,
@@ -328,8 +331,16 @@ O estado salvo no navegador é versionado (`cpn-controle:estado:v2`), e
 obrigatório, acrescente também a migração.
 
 Regra que não deve ser quebrada: **componente nenhum fala com `localStorage` ou com o
-Supabase diretamente.** Tudo passa por `src/services/storage.ts`. É o que vai permitir
-a etapa 4 sem reescrever a UI.
+Supabase diretamente.** Tudo passa pelo repositório.
+
+**A gravação é por registro, nunca por estado inteiro.** Com várias pessoas no mesmo
+quadro, salvar tudo de uma vez faria a última gravação apagar o trabalho das outras.
+O store continua escrevendo o próximo estado em memória; `persistirDiferencas` compara
+com o último estado gravado e manda só as linhas que mudaram. Uma ação nova passa a
+ser persistida sem ninguém lembrar de nada — e isso é coberto por testes.
+
+Mudança vinda de outro cliente entra pelo `inscrever` e recarrega o estado, sem
+disparar nova gravação.
 
 ## Acessibilidade
 
