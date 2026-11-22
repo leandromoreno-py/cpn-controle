@@ -28,8 +28,10 @@ import { ESTADO_VAZIO, persistirDiferencas } from '../services/repositorio';
 import {
   acompanharPresenca,
   aoMudarSessao,
+  entrarAnonimo,
   entrarComSenha,
   garantirUsuario,
+  identificar,
   sair as sairDoSupabase,
   sessaoAtual as sessaoAuthAtual,
 } from '../services/supabase';
@@ -59,8 +61,13 @@ interface Ctx {
   /** Ninguém se identificou ainda neste navegador (modo local). */
   precisaRegistro: boolean;
 
-  /** Com Supabase ligado e ninguém autenticado, a tela de login assume. */
+  /**
+   * Entrada por conta. Só assume quando a entrada anônima não é possível —
+   * normalmente porque o projeto Supabase a tem desligada.
+   */
   precisaLogin: boolean;
+  /** Motivo pelo qual a entrada automática não deu certo, se não deu. */
+  erroEntrada: string | null;
   entrar(email: string, senha: string): Promise<void>;
   sairDaConta(): Promise<void>;
   /** Mensagem de falha de gravação, quando o banco recusa algo. */
@@ -142,15 +149,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [conferindoAuth, setConferindoAuth] = useState(multiusuario);
   const [usuarioLogadoId, setUsuarioLogadoId] = useState<string | null>(null);
   const [presentes, setPresentes] = useState<string[]>([]);
+  const [erroEntrada, setErroEntrada] = useState<string | null>(null);
+  const [identificacaoConferida, setIdentificacaoConferida] = useState(!multiusuario);
 
   // Autenticação, só quando há Supabase configurado.
+  //
+  // Não há tela de senha na entrada: quem abre o app recebe uma sessão anônima
+  // do Supabase, e se identifica em seguida pela tela de registro inicial. A
+  // sessão anônima é uma sessão de verdade — tem token e `auth.uid()`, e o RLS
+  // continua valendo. A entrada por conta segue existindo para quando o
+  // serviço quiser trancar o quadro, e assume se a anônima estiver desligada
+  // no projeto.
   useEffect(() => {
     if (!multiusuario) return;
     let vivo = true;
-    void sessaoAuthAtual().then((s) => {
+    void sessaoAuthAtual().then(async (s) => {
       if (!vivo) return;
-      setSessaoAuth(s);
-      setConferindoAuth(false);
+      if (s) {
+        setSessaoAuth(s);
+        setConferindoAuth(false);
+        return;
+      }
+      try {
+        await entrarAnonimo();
+        // a sessão chega pelo aoMudarSessao, abaixo
+      } catch (erro) {
+        if (!vivo) return;
+        setErroEntrada((erro as Error).message);
+        setConferindoAuth(false);
+      }
     });
     return aoMudarSessao((s) => {
       setSessaoAuth(s);
@@ -182,21 +209,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [repo, autenticado]);
 
-  // O profissional logado vira (ou encontra) o registro em `usuarios`, para o
-  // nome aparecer na auditoria sem cadastro duplicado.
+  // Procura o cadastro desta sessão. Sem cadastro, `usuarioLogadoId` fica nulo
+  // e a tela de registro inicial assume — é lá que a pessoa diz quem é.
   useEffect(() => {
     if (!multiusuario || !sessaoAuth) return;
     let vivo = true;
-    void garantirUsuario(sessaoAuth).then((u) => {
-      if (vivo && u) {
-        setUsuarioLogadoId(u.id);
-        void recarregar();
-      }
-    });
+    void garantirUsuario(sessaoAuth)
+      .then((u) => {
+        if (!vivo) return;
+        setUsuarioLogadoId(u ? u.id : null);
+        setIdentificacaoConferida(true);
+      })
+      .catch(() => vivo && setIdentificacaoConferida(true));
     return () => {
       vivo = false;
     };
-  }, [multiusuario, sessaoAuth, recarregar]);
+  }, [multiusuario, sessaoAuth]);
 
   useEffect(() => {
     if (!repo.inscrever || !autenticado) return;
@@ -306,7 +334,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     pronto: estado != null,
     backend: repo.backend,
     multiusuario,
+    // A tela de senha só aparece quando a entrada anônima não é possível —
+    // tipicamente porque o projeto a tem desligada.
     precisaLogin: multiusuario && !conferindoAuth && sessaoAuth == null,
+    erroEntrada,
     entrar: async (email, senha) => {
       await entrarComSenha(email, senha);
     },
@@ -328,14 +359,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(CHAVE_USUARIO, id);
     },
 
-    // Modo local: só precisa de registro inicial quem ainda não se
-    // identificou. Com login, quem registra é quem entrou na conta.
-    precisaRegistro:
-      !multiusuario && estado != null && !estado.usuarios.some((u) => u.id === usuarioId),
+    // Ninguém mexe no quadro sem dizer quem é, nos dois modos. No modo local a
+    // identificação mora no navegador; com banco, numa linha de `usuarios`
+    // amarrada à sessão.
+    precisaRegistro: multiusuario
+      ? sessaoAuth != null && identificacaoConferida && usuarioLogadoId == null
+      : estado != null && !estado.usuarios.some((u) => u.id === usuarioId),
 
     registrarIdentidade: (funcao, nome) => {
       const limpo = nome.trim().replace(/\s+/g, ' ');
       if (!limpo) return;
+
+      // Com banco, a identificação é uma linha de `usuarios` amarrada à sessão
+      // de autenticação. Quem grava é o serviço, porque a política `self_insere`
+      // compara `auth_user_id` com `auth.uid()`.
+      if (multiusuario) {
+        if (!sessaoAuth) return;
+        void identificar(sessaoAuth, funcao, limpo)
+          .then(async (u) => {
+            if (!u) return;
+            setUsuarioLogadoId(u.id);
+            await recarregar();
+            await repo.registrarAuditoria({
+              id: novoId('aud'),
+              timestamp: agoraIso(),
+              usuarioId: u.id,
+              usuarioNome: u.nome,
+              usuarioFuncao: u.funcao,
+              acao: 'registro_inicial',
+              entidade: 'usuario',
+              valorNovo: `${FUNCAO_LABEL[funcao]} ${limpo}`,
+            });
+            await recarregar();
+          })
+          .catch((erro: Error) =>
+            setErroGravacao(`Não foi possível registrar a identificação: ${erro.message}`)
+          );
+        return;
+      }
+
       const existente = estado?.usuarios.find(
         (u) => u.nome.toLowerCase() === limpo.toLowerCase()
       );

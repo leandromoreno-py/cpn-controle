@@ -2,17 +2,19 @@ import { useState, type FormEvent } from 'react';
 import { useApp } from '../state/store';
 
 /**
- * Entrada do app quando há Supabase configurado.
+ * Entrada por conta — o caminho trancado.
  *
- * Não existe autocadastro: as contas são criadas pelo administrador no painel
- * do Supabase. Num serviço de saúde, quem tem acesso ao quadro de pacientes é
- * decisão da unidade, não de quem preenche um formulário.
+ * Normalmente o app nem chega aqui: quem abre recebe uma sessão anônima e se
+ * identifica pela tela de registro inicial. Esta tela assume quando a entrada
+ * anônima não é possível (desligada no projeto), e é o caminho para quando o
+ * serviço decidir trancar o quadro — aí quem tem acesso é decisão da unidade,
+ * não de quem preenche um formulário.
  */
 export function Login() {
-  const { entrar } = useApp();
+  const { entrar, erroEntrada } = useApp();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
-  const [erro, setErro] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(erroEntrada);
   const [entrando, setEntrando] = useState(false);
 
   const enviar = async (e: FormEvent) => {

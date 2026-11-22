@@ -46,7 +46,19 @@ Confira em **Table Editor** que apareceram: `sessoes`, `categorias`, `leitos`,
 `pacientes`, `controles`, `medicacoes`, `exames_programacoes`, `auditoria`, `usuarios`
 e `config` — e que `leitos` já tem A a L mais os três extras.
 
-### 3. Criar os usuários
+### 3. Ligar a entrada sem senha
+
+**Authentication → Sign In / Providers → Allow anonymous sign-ins**, ligado.
+
+É o que faz a entrada do app ser identificação em vez de conta: quem abre recebe uma
+sessão anônima, válida e com RLS, e diz quem é na tela de registro inicial — função e
+nome, sem senha. Desligado, o app cai na entrada por conta e mostra o motivo na tela.
+
+Isso significa que **quem tiver o endereço entra e vê o quadro inteiro**. É adequado
+para demonstração, e só para isso: nenhum dado real de paciente entra enquanto a
+entrada for aberta.
+
+### 4. Criar contas (opcional, só se for trancar o quadro)
 
 **Authentication → Users → Add user**, um por profissional, com e-mail e senha.
 Marque *Auto Confirm User*, senão a pessoa não consegue entrar sem confirmar o e-mail.
@@ -70,7 +82,7 @@ montando o serviço; não precisa editar a tabela à mão. Para dar o mesmo pode
 pessoa depois, marque `admin = true` na linha dela em `usuarios` (um administrador pode
 fazer isso pelo app; ninguém consegue marcar em si mesmo).
 
-### 4. Apontar o app para o projeto
+### 5. Apontar o app para o projeto
 
 Em **Project Settings → API**, copie a *Project URL* e a chave *anon public*. Copie
 `.env.example` para `.env` e preencha:

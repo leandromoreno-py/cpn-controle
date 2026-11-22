@@ -12,6 +12,7 @@ import type {
   Usuario,
 } from '../types';
 import { normalizarFuncao } from '../types';
+import type { FuncaoUsuario } from '../types';
 import type { Repositorio } from './repositorio';
 import { COMORBIDADES_PADRAO } from './seed';
 
@@ -450,26 +451,74 @@ function traduzirErroAuth(mensagem: string): string {
  * primeira entrada, para o nome do profissional aparecer na auditoria sem que
  * alguém precise cadastrá-lo duas vezes.
  */
+/**
+ * Entrada sem e-mail nem senha: o Supabase devolve uma sessão anônima de
+ * verdade, com token e `auth.uid()` próprios, e o RLS continua valendo. A
+ * identificação de quem é a pessoa vem depois, na tela de registro inicial.
+ *
+ * Exige "Allow anonymous sign-ins" ligado nas configurações de autenticação do
+ * projeto. Desligado, o erro é claro e o app cai na entrada por conta.
+ */
+export async function entrarAnonimo(): Promise<void> {
+  const db = obterCliente();
+  const { error } = await db.auth.signInAnonymously();
+  if (error) throw new Error(traduzirErroAuth(error.message));
+}
+
+/**
+ * Procura o cadastro desta sessão. Devolve null quando a pessoa ainda não se
+ * identificou — é esse null que faz a tela de registro inicial aparecer.
+ *
+ * Não cria nada: antes o cadastro nascia sozinho com o nome tirado do e-mail,
+ * o que produzia "leandro.cruz" assinando o prontuário.
+ */
 export async function garantirUsuario(sessao: Session): Promise<Usuario | null> {
   const db = obterCliente();
-  const { data: existente } = await db
+  const { data } = await db
     .from('usuarios')
     .select('*')
     .eq('auth_user_id', sessao.user.id)
     .maybeSingle();
-  if (existente) return usuarioDe(existente as Linha);
+  return data ? usuarioDe(data as Linha) : null;
+}
 
-  const email = sessao.user.email ?? '';
-  const novo = {
-    auth_user_id: sessao.user.id,
-    nome: (sessao.user.user_metadata?.nome as string) ?? email.split('@')[0],
-    funcao: normalizarFuncao(sessao.user.user_metadata?.funcao),
-    email,
-    ativo: true,
-  };
-  const { data, error } = await db.from('usuarios').insert(novo).select().maybeSingle();
-  if (error || !data) return null;
-  return usuarioDe(data as Linha);
+/**
+ * Grava a identificação desta sessão: função e nome escolhidos na entrada.
+ * `auth_user_id` amarra o cadastro à sessão, e é o que a política `self_insere`
+ * exige — ninguém cria cadastro em nome de outra pessoa.
+ */
+export async function identificar(
+  sessao: Session,
+  funcao: FuncaoUsuario,
+  nome: string
+): Promise<Usuario | null> {
+  const db = obterCliente();
+  const existente = await garantirUsuario(sessao);
+  if (existente) {
+    // Mesma sessão de volta com outra função (MR1 virou MR2): o cadastro
+    // acompanha, e o que ela já assinou continua com a função de então.
+    if (existente.funcao === funcao && existente.nome === nome) return existente;
+    const { data } = await db
+      .from('usuarios')
+      .update({ funcao, nome })
+      .eq('id', existente.id)
+      .select()
+      .maybeSingle();
+    return data ? usuarioDe(data as Linha) : existente;
+  }
+  const { data, error } = await db
+    .from('usuarios')
+    .insert({
+      auth_user_id: sessao.user.id,
+      nome,
+      funcao,
+      email: sessao.user.email ?? null,
+      ativo: true,
+    })
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? usuarioDe(data as Linha) : null;
 }
 
 

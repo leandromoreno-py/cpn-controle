@@ -287,8 +287,7 @@ begin
   end loop;
 end $$;
 
--- Configuração (leitos, categorias, usuários, config): leitura para todos,
--- escrita só para admin.
+-- Configuração: leitura para todos os identificados.
 do $$
 declare t text;
 begin
@@ -298,13 +297,38 @@ begin
     execute format(
       'create policy todos_leem on %I for select to authenticated using (true);', t
     );
+  end loop;
+end $$;
+
+-- Escrita na configuração: qualquer pessoa identificada, e tudo que ela mexer
+-- fica assinado na auditoria.
+--
+-- A entrada do app é identificação, não conta: quem abre recebe uma sessão
+-- anônima do Supabase e diz quem é. Com isso, restringir leitos e categorias a
+-- admin faria o app parecer quebrado para todos menos a primeira pessoa que
+-- entrou — só ela poderia renomear um leito ou criar uma sessão.
+--
+-- A coluna `admin` e `sou_admin()` continuam existindo de propósito: são o que
+-- volta a valer no dia em que o serviço trancar o quadro com contas de verdade.
+do $$
+declare t text;
+begin
+  foreach t in array array['leitos', 'categorias', 'config', 'sessoes']
+  loop
     execute format('drop policy if exists admin_escreve on %I;', t);
+    execute format('drop policy if exists identificado_escreve on %I;', t);
     execute format(
-      'create policy admin_escreve on %I for all to authenticated
-       using (sou_admin()) with check (sou_admin());', t
+      'create policy identificado_escreve on %I for all to authenticated
+       using (true) with check (true);', t
     );
   end loop;
 end $$;
+
+-- `usuarios` é a exceção: cada pessoa cria e mantém a PRÓPRIA linha, e ninguém
+-- altera o cadastro de outra. É isso que sustenta a assinatura — se qualquer um
+-- pudesse reescrever o nome de qualquer cadastro, a auditoria deixaria de dizer
+-- quem fez o quê.
+drop policy if exists admin_escreve on usuarios;
 
 -- Medicação e exame podem ser removidos: tirar da lista uma programação errada
 -- é rotina de plantão, e a remoção fica no histórico de alterações. Sem política
@@ -340,9 +364,10 @@ create policy self_altera on usuarios for update to authenticated
   using (auth_user_id = auth.uid())
   with check (auth_user_id = auth.uid());
 
--- Quem entra primeiro vira administrador, senão não haveria quem cadastrasse
--- leitos e categorias. Como não existe autocadastro (as contas são criadas pela
--- administração), quem entra primeiro é quem está montando o serviço.
+-- Quem entra primeiro fica marcado como administrador. Hoje isso não concede
+-- nada além do que todo mundo já pode (a configuração é aberta a quem se
+-- identificou), mas registra quem montou o serviço e volta a ter efeito no dia
+-- em que o quadro for trancado com contas.
 create or replace function public.primeiro_usuario_e_admin() returns trigger
   language plpgsql security definer
   set search_path = ''

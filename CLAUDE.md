@@ -255,6 +255,33 @@ Medicação com próxima dose vencida continua aparecendo em laranja no chip da 
 Alta e transferência arquivam a paciente. **Nada é excluído.** O histórico inteiro fica
 e a paciente pode ser reaberta num leito livre.
 
+### A entrada é identificação, não conta
+
+**Decidido em 22/11/2026.** Pedir e-mail e senha para quem só quer ver se o app
+serve afasta a pessoa antes de ela olhar o quadro. Então quem abre o app recebe uma
+**sessão anônima do Supabase** (`signInAnonymously`) e se identifica na tela de
+registro inicial: função e nome, sem senha. A tela é a mesma nos dois modos.
+
+A sessão anônima é uma sessão de verdade — tem token e `auth.uid()` —, então o RLS
+continua valendo e cada pessoa fica amarrada ao seu cadastro em `usuarios`. Exige
+**Allow anonymous sign-ins** ligado nas configurações de autenticação do projeto.
+
+**O que isso custa:** quem tiver o endereço entra e vê o quadro inteiro. O repositório
+e o endereço do site são públicos, então isso quer dizer qualquer pessoa. Para
+demonstração com nomes inventados, é um preço justo; para paciente real, não existe
+preço justo. O banner do topo deixou de ser precaução e passou a descrever o que o app
+é. **Nenhum dado real entra enquanto a entrada for esta.**
+
+O caminho de volta é curto, e é por isso que `Login`, `entrarComSenha`, a coluna
+`admin` e `sou_admin()` continuam no código sem uso efetivo: trancar o quadro é ligar a
+entrada por conta de novo, com a tela de identificação seguindo como camada de "quem
+sou eu". Não apague essas partes por parecerem mortas.
+
+Enquanto a entrada é aberta, a **configuração é aberta**: leitos, categorias, sessões e
+listas aceitam escrita de qualquer pessoa identificada. Restringir a admin faria o app
+parecer quebrado para todos menos a primeira pessoa que entrou. `usuarios` é a exceção
+— cada pessoa só mexe na própria linha, porque é isso que sustenta a assinatura.
+
 ### Cinco funções fixas, e nada anônimo
 
 As funções são **MR1, MR2, MR3, Interno e Staff** — lista fechada, em
@@ -262,10 +289,10 @@ As funções são **MR1, MR2, MR3, Interno e Staff** — lista fechada, em
 cada alteração, e texto livre ali produziria dez grafias para a mesma coisa.
 
 O **registro inicial** (`RegistroInicial`) é a porta de entrada em modo local: escolher
-a função e dizer o nome. O quadro não abre anônimo, porque alteração sem autor não
+a função e dizer o nome. O quadro não abre sem autor, porque alteração sem autor não
 serve de registro. A identificação fica salva no navegador e troca pelo botão com a
-assinatura, na barra superior. Com Supabase, quem registra é quem entrou na conta, e
-essa tela não aparece.
+assinatura, na barra superior. Com Supabase é a mesma tela, e o que ela grava é uma
+linha de `usuarios` amarrada à sessão de autenticação.
 
 Nome já existente volta para o mesmo cadastro, em vez de criar um segundo: dois
 "Pedro Nogueira" na auditoria seriam duas pessoas aos olhos de quem lê. Se a função
