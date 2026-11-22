@@ -48,7 +48,7 @@ Clicar no leito abre um painel ancorado nele com:
 - **Transferir de leito** — escolher um leito livre da sessão e mover.
 - **Anamnese** — a descrição do caso em texto livre, com marcador no chip quando já
   existe texto.
-- **Editar dados** e **Arquivar / encerrar atendimento**.
+- **Editar dados**, **Exames e programações** e **Arquivar / encerrar atendimento**.
 
 **Toda ação do painel passa por confirmação em palavras**, dizendo o que vai acontecer
 ("Mudar a situação de Gestante para Óbito fetal?"). Trocar a situação de uma paciente
@@ -56,6 +56,12 @@ ou movê-la de leito não pode acontecer por um clique torto no meio do plantão
 
 O leito é o alvo mais fácil de acertar na linha, e é por onde o plantão pensa — por
 isso ele, e não um menu genérico, carrega essas ações.
+
+**Painéis ancorados.** A caixa do leito e o menu ⋯ são posicionados na TELA, não dentro
+da linha (`usePosicaoAncorada`). Dentro da linha o contêiner da tabela os cortava,
+porque ele tem `overflow: hidden` para arredondar os cantos. Eles abrem abaixo do
+botão; se não couber, acima; se não couber nem acima, encostam na borda e rolam por
+dentro. Qualquer painel novo que saia de um botão da linha deve usar o mesmo hook.
 
 ### Duas visualizações: quadro e celular
 
@@ -185,6 +191,16 @@ número.
 
 Leitos: fixos A a L, mais Extra 1 a 3, mais os que o admin criar.
 
+### Exames e programações
+
+Acrescentar, marcar e remover ficam em `ModalExames`, aberto pelo menu ⋯, pela caixa
+do leito ou pelo botão ☑ do cartão. Antes só dava para cadastrar na admissão, o que
+não cobre o plantão: programação nasce no meio do turno.
+
+Marcar como realizado grava quem marcou e o horário; remover tira da lista e fica no
+histórico de alterações. As checkboxes no quadro e na página Exames continuam
+funcionando para marcar e desmarcar sem abrir nada.
+
 ### Arquivamento preserva tudo
 
 Alta e transferência arquivam a paciente. **Nada é excluído.** O histórico inteiro fica
@@ -255,8 +271,9 @@ src/
   components/          Sidebar, AbasSessoes, QuadroPacientes, LinhaPaciente,
                        CartaoPaciente, MenuLeito,
                        ModalAdmissao, ModalControles, ModalAnamnese,
-                       ModalEditarPaciente, ModalEncerrar, ConfigLeitos,
-                       ConfigCategorias
+                       ModalEditarPaciente, ModalEncerrar, ModalExames,
+                       ConfigLeitos, ConfigCategorias
+                       usePosicaoAncorada — painéis que saem de um botão da linha
 ```
 
 O estado salvo no navegador é versionado (`cpn-controle:estado:v2`), e

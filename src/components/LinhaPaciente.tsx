@@ -3,6 +3,7 @@ import type { Controle, Paciente } from '../types';
 import { DU_LABEL, STATUS_LABEL } from '../types';
 import { useApp } from '../state/store';
 import { MenuLeito } from './MenuLeito';
+import { estiloPainel, usePosicaoAncorada } from './usePosicaoAncorada';
 import { estiloCategoria } from '../lib/contrast';
 import {
   alertasClinicos,
@@ -36,17 +37,25 @@ export function LinhaPaciente({
   onRegistrar,
   onAnamnese,
   onEditar,
+  onExames,
   onEncerrar,
 }: {
   paciente: Paciente;
   onRegistrar(p: Paciente): void;
   onAnamnese(p: Paciente): void;
   onEditar(p: Paciente): void;
+  onExames(p: Paciente): void;
   onEncerrar(p: Paciente): void;
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [leitoAberto, setLeitoAberto] = useState(false);
   const refLeito = useRef<HTMLButtonElement>(null);
+  const refAcoes = useRef<HTMLButtonElement>(null);
+  // Mesmo motivo da caixa do leito: ancorado na tela para não ser cortado.
+  const [refMenu, posMenu] = usePosicaoAncorada(
+    menuAberto ? refAcoes.current : null,
+    'direita'
+  );
   const { estado, tema, alternarExame } = useApp();
 
   const categoria = estado.categorias.find((c) => c.id === paciente.categoriaId);
@@ -129,6 +138,7 @@ export function LinhaPaciente({
               onFechar={() => setLeitoAberto(false)}
               onAnamnese={onAnamnese}
               onEditar={onEditar}
+              onExames={onExames}
               onEncerrar={onEncerrar}
             />
           )}
@@ -252,6 +262,7 @@ export function LinhaPaciente({
             ✚
           </button>
           <button
+            ref={refAcoes}
             type="button"
             className="btn btn--icon"
             onClick={() => setMenuAberto((v) => !v)}
@@ -267,24 +278,16 @@ export function LinhaPaciente({
               <div
                 role="presentation"
                 onClick={() => setMenuAberto(false)}
-                style={{ position: 'fixed', inset: 0, zIndex: 20 }}
+                style={{ position: 'fixed', inset: 0, zIndex: 70 }}
               />
               <div
+                ref={refMenu}
                 role="menu"
                 style={{
-                  position: 'absolute',
-                  top: 38,
-                  right: 0,
-                  zIndex: 21,
-                  minWidth: 210,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 10,
-                  boxShadow: '0 12px 32px rgba(42,10,61,0.22)',
+                  ...estiloPainel(posMenu, 222),
                   padding: 5,
                   display: 'flex',
                   flexDirection: 'column',
-                  textAlign: 'left',
                 }}
               >
                 <ItemMenu
@@ -310,6 +313,14 @@ export function LinhaPaciente({
                   }}
                 >
                   Registrar controles
+                </ItemMenu>
+                <ItemMenu
+                  onClick={() => {
+                    setMenuAberto(false);
+                    onExames(paciente);
+                  }}
+                >
+                  Exames e programações
                 </ItemMenu>
                 <div style={{ height: 1, background: 'var(--border)', margin: '4px 2px' }} />
                 <ItemMenu

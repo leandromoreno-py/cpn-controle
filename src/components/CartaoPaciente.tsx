@@ -25,12 +25,14 @@ export function CartaoPaciente({
   onRegistrar,
   onAnamnese,
   onEditar,
+  onExames,
   onEncerrar,
 }: {
   paciente: Paciente;
   onRegistrar(p: Paciente): void;
   onAnamnese(p: Paciente): void;
   onEditar(p: Paciente): void;
+  onExames(p: Paciente): void;
   onEncerrar(p: Paciente): void;
 }) {
   const { estado, tema, alternarExame } = useApp();
@@ -120,6 +122,7 @@ export function CartaoPaciente({
               onFechar={() => setLeitoAberto(false)}
               onAnamnese={onAnamnese}
               onEditar={onEditar}
+              onExames={onExames}
               onEncerrar={onEncerrar}
             />
           )}
@@ -391,6 +394,16 @@ export function CartaoPaciente({
           onClick={() => onRegistrar(paciente)}
         >
           ✚ Registrar controles
+        </button>
+        <button
+          type="button"
+          className="btn"
+          style={{ flex: '0 0 auto', height: 44, padding: '0 12px' }}
+          onClick={() => onExames(paciente)}
+          aria-label="Exames e programações"
+          title="Exames e programações"
+        >
+          ☑
         </button>
         <button
           type="button"

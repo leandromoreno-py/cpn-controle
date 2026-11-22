@@ -62,6 +62,8 @@ interface Ctx {
   salvarCategoria(categoria: Categoria): void;
   restaurarCoresPadrao(): void;
   alternarExame(exame: ExameProgramacao): void;
+  adicionarExame(pacienteId: string, texto: string, horario?: string): void;
+  removerExame(exame: ExameProgramacao): void;
 
   adicionarUsuario(u: Omit<Usuario, 'id'>): Usuario;
 }
@@ -679,6 +681,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
           pacienteId: exame.pacienteId,
           campo: exame.texto,
           valorNovo: exame.realizado ? 'pendente' : 'realizado',
+        })
+      );
+    },
+
+    adicionarExame: (pacienteId, texto, horario) => {
+      const limpo = texto.trim();
+      if (!limpo) return;
+      mutar(
+        (e) => ({
+          ...e,
+          exames: [
+            ...e.exames,
+            {
+              id: novoId('e'),
+              pacienteId,
+              texto: limpo,
+              horarioProgramado: horario || undefined,
+              realizado: false,
+            },
+          ],
+        }),
+        auditar('exame_check', {
+          pacienteId,
+          campo: 'nova programação',
+          valorNovo: horario ? `${limpo} · ${horario}` : limpo,
+        })
+      );
+    },
+
+    removerExame: (exame) => {
+      mutar(
+        (e) => ({ ...e, exames: e.exames.filter((x) => x.id !== exame.id) }),
+        auditar('exame_check', {
+          pacienteId: exame.pacienteId,
+          campo: 'programação removida',
+          valorAnterior: exame.texto,
         })
       );
     },

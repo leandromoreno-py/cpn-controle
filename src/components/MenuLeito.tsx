@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { Categoria, Paciente } from '../types';
 import { useApp } from '../state/store';
 import { estiloCategoria } from '../lib/contrast';
+import { estiloPainel, usePosicaoAncorada } from './usePosicaoAncorada';
 
 type Pendente =
   | { tipo: 'situacao'; categoria: Categoria }
@@ -16,7 +17,6 @@ type Pendente =
  * coisas que ninguém deve conseguir fazer com um clique torto no plantão.
  */
 const LARGURA = 268;
-const MARGEM = 8;
 
 export function MenuLeito({
   paciente,
@@ -24,6 +24,7 @@ export function MenuLeito({
   onFechar,
   onAnamnese,
   onEditar,
+  onExames,
   onEncerrar,
 }: {
   paciente: Paciente;
@@ -32,49 +33,16 @@ export function MenuLeito({
   onFechar(): void;
   onAnamnese(p: Paciente): void;
   onEditar(p: Paciente): void;
+  onExames(p: Paciente): void;
   onEncerrar(p: Paciente): void;
 }) {
   const { estado, tema, sessaoAtiva, mudarCategoria, transferirLeito, renomearLeito } =
     useApp();
   const [pendente, setPendente] = useState<Pendente>(null);
 
-  // A caixa é `fixed`, não `absolute`: dentro da linha ela era cortada pelo
-  // contêiner da tabela, que tem overflow hidden para arredondar os cantos.
-  const refCaixa = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  useLayoutEffect(() => {
-    const posicionar = () => {
-      const a = ancora?.getBoundingClientRect();
-      if (!a) return;
-      const el = refCaixa.current;
-      const largura = el?.offsetWidth ?? LARGURA;
-      const altura = el?.offsetHeight ?? 320;
-
-      const left = Math.min(
-        Math.max(MARGEM, a.left),
-        Math.max(MARGEM, window.innerWidth - largura - MARGEM)
-      );
-
-      // Abre abaixo do leito; se não couber, abre acima; se não couber nem
-      // acima, encosta na borda e rola por dentro.
-      let top = a.bottom + 6;
-      if (top + altura + MARGEM > window.innerHeight) {
-        const acima = a.top - altura - 6;
-        top = acima >= MARGEM ? acima : Math.max(MARGEM, window.innerHeight - altura - MARGEM);
-      }
-      setPos({ top, left });
-    };
-
-    posicionar();
-    window.addEventListener('scroll', posicionar, true);
-    window.addEventListener('resize', posicionar);
-    return () => {
-      window.removeEventListener('scroll', posicionar, true);
-      window.removeEventListener('resize', posicionar);
-    };
-    // `pendente` muda a altura da caixa, então reposiciona junto.
-  }, [ancora, pendente]);
+  // A caixa é ancorada na tela: dentro da linha ela era cortada pelo contêiner
+  // da tabela, que tem overflow hidden para arredondar os cantos.
+  const [refCaixa, pos] = usePosicaoAncorada(ancora, 'esquerda', pendente);
   const [leitoDestino, setLeitoDestino] = useState('');
   const [renomeando, setRenomeando] = useState(false);
   const [nome, setNome] = useState('');
@@ -127,23 +95,7 @@ export function MenuLeito({
         ref={refCaixa}
         role="dialog"
         aria-label={`Editar leito ${leito?.nome ?? ''}`}
-        style={{
-          position: 'fixed',
-          top: pos?.top ?? -9999,
-          left: pos?.left ?? -9999,
-          zIndex: 71,
-          width: LARGURA,
-          maxHeight: `calc(100vh - ${MARGEM * 2}px)`,
-          overflowY: 'auto',
-          visibility: pos ? 'visible' : 'hidden',
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 11,
-          boxShadow: '0 14px 36px rgba(42,10,61,0.26)',
-          padding: 12,
-          textAlign: 'left',
-          cursor: 'default',
-        }}
+        style={{ ...estiloPainel(pos, LARGURA), padding: 12 }}
       >
         <div style={{ marginBottom: 10 }}>
           {renomeando && leito ? (
@@ -330,6 +282,14 @@ export function MenuLeito({
                 }}
               >
                 Editar dados da paciente
+              </Item>
+              <Item
+                onClick={() => {
+                  onFechar();
+                  onExames(paciente);
+                }}
+              >
+                Exames e programações
               </Item>
               <Item
                 destaque
