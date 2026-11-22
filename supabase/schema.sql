@@ -386,12 +386,20 @@ create trigger usuarios_primeiro_admin before insert on usuarios
 
 -- `self_altera` deixaria a pessoa marcar admin em si mesma. O RLS não enxerga
 -- coluna, então quem barra é o gatilho.
+--
+-- A condição `auth.uid() is not null` deixa de fora quem está numa conexão
+-- direta ao banco — SQL Editor, service role, migração —, onde não há JWT.
+-- Sem ela, o próprio dono do banco não conseguia promover ninguém, com uma
+-- mensagem que acusava falta de permissão. Quem chega pelo app sempre tem uid,
+-- mesmo anônimo, então ninguém escapa da regra por esse caminho.
 create or replace function public.proteger_papel_admin() returns trigger
   language plpgsql security definer
   set search_path = ''
 as $$
 begin
-  if new.admin is distinct from old.admin and not public.sou_admin() then
+  if new.admin is distinct from old.admin
+     and auth.uid() is not null
+     and not public.sou_admin() then
     raise exception 'só um administrador pode conceder ou retirar o papel de administrador';
   end if;
   return new;
