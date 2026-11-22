@@ -11,11 +11,13 @@ configuradas pela unidade. O banner no topo do app diz isso ao usuário.
 
 Etapas 1 a 3 implementadas: quadro de pacientes, admissão, modal de controles,
 anamnese, edição de dados da paciente, encerramento de atendimento, sessões,
-configurações de leitos e categorias, exames, arquivadas e histórico de alterações.
+configurações de leitos e categorias, exames, arquivadas, histórico de alterações e
+registro inicial com as cinco funções (MR1–MR3, Interno, Staff).
 
-Persistência em `localStorage` por enquanto. A etapa 4 (Supabase) troca a
-implementação dentro de `src/services/`, sem tocar nos componentes. O schema já está
-escrito em `supabase/schema.sql`.
+Etapa 4 (Supabase) aplicada num projeto real: tabelas, RLS, privilégios, realtime e
+seed conferidos no banco, políticas testadas uma a uma com papel `authenticated`
+simulado. Falta o teste de ponta a ponta pelo app, com conta de verdade. Sem as
+variáveis de ambiente o app roda em modo local, um quadro por navegador.
 
 Pendentes: passagem de plantão, partograma, exportação CSV. Ver
 `docs/prompts-etapas.md`.
@@ -253,11 +255,72 @@ Medicação com próxima dose vencida continua aparecendo em laranja no chip da 
 Alta e transferência arquivam a paciente. **Nada é excluído.** O histórico inteiro fica
 e a paciente pode ser reaberta num leito livre.
 
+### A entrada é identificação, não conta
+
+**Decidido em 22/11/2026.** Pedir e-mail e senha para quem só quer ver se o app
+serve afasta a pessoa antes de ela olhar o quadro. Então quem abre o app recebe uma
+**sessão anônima do Supabase** (`signInAnonymously`) e se identifica na tela de
+registro inicial: função e nome, sem senha. A tela é a mesma nos dois modos.
+
+A sessão anônima é uma sessão de verdade — tem token e `auth.uid()` —, então o RLS
+continua valendo e cada pessoa fica amarrada ao seu cadastro em `usuarios`. Exige
+**Allow anonymous sign-ins** ligado nas configurações de autenticação do projeto.
+
+**O que isso custa:** quem tiver o endereço entra e vê o quadro inteiro. O repositório
+e o endereço do site são públicos, então isso quer dizer qualquer pessoa. Para
+demonstração com nomes inventados, é um preço justo; para paciente real, não existe
+preço justo. O banner do topo deixou de ser precaução e passou a descrever o que o app
+é. **Nenhum dado real entra enquanto a entrada for esta.**
+
+O caminho de volta é curto, e é por isso que `Login`, `entrarComSenha`, a coluna
+`admin` e `sou_admin()` continuam no código sem uso efetivo: trancar o quadro é ligar a
+entrada por conta de novo, com a tela de identificação seguindo como camada de "quem
+sou eu". Não apague essas partes por parecerem mortas.
+
+Enquanto a entrada é aberta, a **configuração é aberta**: leitos, categorias, sessões e
+listas aceitam escrita de qualquer pessoa identificada. Restringir a admin faria o app
+parecer quebrado para todos menos a primeira pessoa que entrou. `usuarios` é a exceção
+— cada pessoa só mexe na própria linha, porque é isso que sustenta a assinatura.
+
+### Cinco funções fixas, e nada anônimo
+
+As funções são **MR1, MR2, MR3, Interno e Staff** — lista fechada, em
+`FuncaoUsuario`. Não há campo de função livre: é a sigla que entra na assinatura de
+cada alteração, e texto livre ali produziria dez grafias para a mesma coisa.
+
+O **registro inicial** (`RegistroInicial`) é a porta de entrada em modo local: escolher
+a função e dizer o nome. O quadro não abre sem autor, porque alteração sem autor não
+serve de registro. A identificação fica salva no navegador e troca pelo botão com a
+assinatura, na barra superior. Com Supabase é a mesma tela, e o que ela grava é uma
+linha de `usuarios` amarrada à sessão de autenticação.
+
+Nome já existente volta para o mesmo cadastro, em vez de criar um segundo: dois
+"Pedro Nogueira" na auditoria seriam duas pessoas aos olhos de quem lê. Se a função
+mudou (MR1 virou MR2), o cadastro acompanha.
+
+A sigla curta e o nome por extenso vivem em `FUNCAO_LABEL` e `FUNCAO_DESCRICAO` —
+mesmo arranjo das categorias, e pelo mesmo motivo: "MR1" cabe na linha, "Médico(a)
+residente — 1º ano" explica.
+
 ### Auditoria é somente leitura
 
 Toda alteração grava autor, horário, campo, valor anterior e novo. Nenhuma tela edita
 ou apaga registros de auditoria, e o RLS do Supabase não tem política de update ou
-delete para essa tabela.
+delete para essa tabela. O `TRUNCATE` do papel `authenticated` também foi revogado —
+ele ignora RLS, e com ele um usuário logado esvaziaria a tabela inteira.
+
+`pacientes` e `controles` igualmente não têm política de delete: "nada é excluído"
+deixou de ser promessa do app e virou regra do banco. Medicação e exame podem ser
+removidos, porque tirar da lista uma programação errada é rotina de plantão.
+
+A linha é escrita por extenso: **`MR1 Fulano de Tal às 14:32 do dia 22/11/2026`**
+(`assinaturaCompleta`, em `src/lib/calc.ts`).
+
+**A função fica gravada no registro, não é lida do cadastro na hora de exibir.** Quem
+era MR1 em março é MR2 em abril, e a linha de março tem de continuar dizendo MR1 — é a
+diferença entre um histórico e uma lista de nomes. Vale para `auditoria.usuarioFuncao`,
+`controles.responsavelFuncao` e `controles.lancadoPorFuncao`. Registros gravados antes
+das funções fixas aparecem só com o nome; não se atribui cargo retroativo a ninguém.
 
 Quando o responsável de um controle é trocado no popup, a auditoria guarda **as duas
 informações**: quem registrou e de qual conta foi lançado. Trocar o responsável não
@@ -276,6 +339,24 @@ troca a sessão.
 A edição de dados **não** registra desfecho, e o encerramento **não** edita dados. A
 separação é deliberada: trocar a categoria de uma paciente é uma correção cadastral,
 registrar um óbito é um ato clínico com causa obrigatória e auditoria.
+
+### No Supabase, GRANT e RLS são duas coisas
+
+O RLS decide **quem pode o quê**; o `grant` decide se o papel pode **sequer falar com a
+tabela**. Faltando o `grant`, o PostgREST responde `permission denied for table` antes
+de avaliar qualquer política — e a mensagem não menciona privilégio de tabela, o que
+manda quem está depurando atrás do RLS à toa. O `schema.sql` cria os dois.
+
+Toda função `security definer` leva `set search_path = ''` e nomes qualificados por
+schema, e as funções de gatilho não têm `execute` para `anon` nem `authenticated`:
+gatilho dispara pelo dono da tabela, e com `execute` a função também viraria endpoint
+REST em `/rest/v1/rpc/`.
+
+**Quem entra primeiro vira administrador** (gatilho `usuarios_primeiro_admin`). Sem
+isso o cadastro era ovo e galinha: `usuarios` só aceitava escrita de admin, e o primeiro
+admin é uma linha de `usuarios`. Cada pessoa pode criar e manter a própria linha
+(`self_insere`, `self_altera`), mas não marcar `admin` em si mesma — o RLS não enxerga
+coluna, então quem barra é o gatilho `usuarios_proteger_admin`.
 
 ### Decisão em aberto
 
@@ -312,24 +393,36 @@ Tipografia Inter, números com `tabular-nums` para alinhar as colunas de control
 src/
   lib/contrast.ts    luminância e contraste — cores editáveis com correção
   lib/calc.ts        IG, tempo relativo, débito urinário, balanço, alertas
-  services/storage.ts  interface assíncrona; nenhum componente acessa o banco direto
+  services/repositorio.ts  contrato + gravação por registro (diferenças)
+  services/local.ts        modo local
+  services/supabase.ts     banco, login, tempo real, presença
+  services/storage.ts      escolhe o backend
   services/seed.ts     8 pacientes fictícias cobrindo as 4 categorias
   state/store.tsx      contexto, ações e gravação da auditoria
   components/          Sidebar, AbasSessoes, QuadroPacientes, LinhaPaciente,
                        CartaoPaciente, MenuLeito,
                        ModalAdmissao, ModalControles, ModalAnamnese,
                        ModalEditarPaciente, ModalEncerrar, ModalExames,
-                       ConfigLeitos, ConfigCategorias
+                       RegistroInicial, ConfigLeitos, ConfigCategorias
                        usePosicaoAncorada — painéis que saem de um botão da linha
 ```
 
-O estado salvo no navegador é versionado (`cpn-controle:estado:v2`), e
-`storage.ts` migra a versão anterior em vez de descartá-la. Ao acrescentar um campo
-obrigatório, acrescente também a migração.
+O estado salvo no navegador é versionado (`cpn-controle:estado:v3`), e `local.ts` migra
+as versões anteriores em vez de descartá-las, da mais recente para a mais antiga (v2 →
+funções fixas; v1 → sessões). Ao acrescentar um campo obrigatório, acrescente também a
+migração.
 
 Regra que não deve ser quebrada: **componente nenhum fala com `localStorage` ou com o
-Supabase diretamente.** Tudo passa por `src/services/storage.ts`. É o que vai permitir
-a etapa 4 sem reescrever a UI.
+Supabase diretamente.** Tudo passa pelo repositório.
+
+**A gravação é por registro, nunca por estado inteiro.** Com várias pessoas no mesmo
+quadro, salvar tudo de uma vez faria a última gravação apagar o trabalho das outras.
+O store continua escrevendo o próximo estado em memória; `persistirDiferencas` compara
+com o último estado gravado e manda só as linhas que mudaram. Uma ação nova passa a
+ser persistida sem ninguém lembrar de nada — e isso é coberto por testes.
+
+Mudança vinda de outro cliente entra pelo `inscrever` e recarrega o estado, sem
+disparar nova gravação.
 
 ## Acessibilidade
 
@@ -345,4 +438,6 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + build
 npm run typecheck
+npm run verificar       # lógica: cálculos, contraste, assinatura, gravação
+npm run verificar:tela  # monta o app num DOM e confere o registro inicial
 ```

@@ -1,7 +1,8 @@
 // Valores derivados. Nada aqui é digitado pelo usuário: idade gestacional,
 // tempo desde o último controle, débito urinário e balanço são sempre calculados.
 
-import type { BalancoHidrico, Controle, Medicacao, Paciente } from '../types';
+import { FUNCAO_LABEL } from '../types';
+import type { BalancoHidrico, Controle, FuncaoUsuario, Medicacao, Paciente } from '../types';
 
 export const MS_HORA = 3_600_000;
 
@@ -328,4 +329,35 @@ export function recortarSerie(doses: Dose[], max = 4): { visiveis: Dose[]; corta
 /** Rótulo curto de uma dose: "3ª 16:30". */
 export function rotuloDose(d: Dose): string {
   return `${d.ordinal}ª ${horaHM(d.horario)}`;
+}
+
+// ----------------------------------------------------------- assinatura
+// Quem registrou, com a função na frente. Uma alteração sem autor identificado
+// não serve de registro, e o cargo é parte da identificação num serviço com
+// residência: "MR1 Fulano" e "Staff Fulano" respondem por coisas diferentes.
+
+/** "MR1 Fulano de Tal". Sem o nome, só a sigla. */
+export function assinatura(funcao: FuncaoUsuario | undefined, nome: string): string {
+  const sigla = funcao ? FUNCAO_LABEL[funcao] : '';
+  return sigla ? `${sigla} ${nome}` : nome;
+}
+
+/** "às 14:32 do dia 22/11/2026". */
+export function dataHoraPorExtenso(iso: string): string {
+  const d = new Date(iso);
+  const data = d.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+  return `às ${horaHM(iso)} do dia ${data}`;
+}
+
+/** "MR1 Fulano de Tal às 14:32 do dia 22/11/2026" — a linha da auditoria. */
+export function assinaturaCompleta(
+  funcao: FuncaoUsuario | undefined,
+  nome: string,
+  iso: string
+): string {
+  return `${assinatura(funcao, nome)} ${dataHoraPorExtenso(iso)}`;
 }

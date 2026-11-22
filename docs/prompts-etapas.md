@@ -9,43 +9,17 @@ dos alertas sem vermelho nem as regras de leito em cada pedido.
 
 ---
 
-## Etapa 4 — Supabase: multiusuário, realtime e auditoria
+## Etapa 4 — Supabase (implementada)
 
-Antes de pedir: crie o projeto no Supabase, rode `supabase/schema.sql` no SQL Editor e
-preencha o `.env` a partir do `.env.example`.
+O código está escrito: `src/services/repositorio.ts`, `local.ts` e `supabase.ts`, mais
+a tela de login e a presença. Falta apenas a configuração do projeto, descrita no
+[README](../README.md#ligar-o-supabase-multiusuário).
 
-> Implemente a persistência em Supabase. O schema já está aplicado no banco
-> (`supabase/schema.sql`) e as variáveis estão no `.env`.
->
-> Crie `src/services/supabase.ts` com uma classe `StorageSupabase` que implementa a
-> interface `Storage` de `src/services/storage.ts`, e devolva-a em `obterStorage()`
-> quando `supabaseConfigurado()` for verdadeiro. Mantenha o modo local funcionando
-> quando as variáveis estiverem ausentes. Nenhum componente deve passar a acessar o
-> Supabase direto.
->
-> Inclua:
->
-> - Login por e-mail e senha, com tela na identidade visual do app. Todos os usuários
->   autenticados podem admitir, editar, registrar controles e arquivar; a função é só
->   rótulo, exceto o admin, que gerencia leitos, categorias, listas e usuários.
-> - Realtime: subscribe em `pacientes`, `controles`, `medicacoes`,
->   `exames_programacoes` e `leitos`, atualizando o quadro sem recarregar.
-> - Presença: avatares no topbar de quem está com o quadro aberto.
-> - Edição concorrente com bloqueio otimista por `updated_at`. A segunda gravação é
->   recusada com o aviso "Atualizado por <nome> às HH:MM" e um botão para recarregar o
->   valor atual. Nunca sobrescreva silenciosamente.
-> - Auditoria gravada no banco em toda alteração, com a aba de histórico lendo de lá.
->   Quando o responsável do controle foi trocado no popup, grave as duas informações.
->
-> Mapeie os nomes: o banco usa snake_case, o app usa camelCase. Lembre que leitos e
-> pacientes pertencem a uma sessão (`sessao_id`), e que o nome do leito é único dentro
-> da sessão, não no serviço inteiro.
+O que vale conferir no primeiro uso real, porque não deu para testar sem um projeto:
 
-**Verifique:** entrar com dois usuários em abas separadas e editar a mesma paciente
-deve mostrar o aviso de conflito; registrar um controle numa aba deve atualizar a outra
-sem recarregar; o histórico deve mostrar autor e horário corretos.
-
----
+- duas janelas com usuários diferentes se atualizam entre si;
+- o histórico de alterações grava o autor certo;
+- uma edição simultânea na mesma paciente não apaga a do outro.
 
 ## Etapa 5a — Medicações
 

@@ -11,10 +11,12 @@ import { ModalEditarPaciente } from './components/ModalEditarPaciente';
 import { ModalEncerrar } from './components/ModalEncerrar';
 import { ModalExames } from './components/ModalExames';
 import { ModalMedicacoes } from './components/ModalMedicacoes';
+import { Login } from './components/Login';
+import { RegistroInicial } from './components/RegistroInicial';
 import { ConfigLeitos } from './components/ConfigLeitos';
 import { ConfigCategorias } from './components/ConfigCategorias';
-import { horaHM, situacaoControle } from './lib/calc';
-import { DESFECHO_LABEL, FUNCAO_LABEL, STATUS_LABEL } from './types';
+import { assinatura, assinaturaCompleta, horaHM, situacaoControle } from './lib/calc';
+import { DESFECHO_LABEL, FUNCAO_DESCRICAO, STATUS_LABEL } from './types';
 
 type Ordem = 'leito' | 'atraso' | 'categoria';
 
@@ -29,9 +31,14 @@ export default function App() {
     tema,
     alternarTema,
     usuarioAtual,
-    definirUsuarioAtual,
     multiusuario,
     sessaoAtiva,
+    precisaLogin,
+    sairDaConta,
+    erroGravacao,
+    limparErroGravacao,
+    presentes,
+    precisaRegistro,
   } = useApp();
 
   const [pagina, setPagina] = useState<Pagina>('quadro');
@@ -51,6 +58,7 @@ export default function App() {
     () => window.innerWidth >= LARGURA_MINIMA_QUADRO
   );
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+  const [trocaAberta, setTrocaAberta] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(CHAVE_VISTA, compacto ? 'celular' : 'quadro');
@@ -76,9 +84,15 @@ export default function App() {
     [ativas, estado.controles]
   );
 
+  if (precisaLogin) return <Login />;
+
   if (!pronto) {
     return <p style={{ padding: 32 }}>Carregando o quadro…</p>;
   }
+
+  // Ninguém se identificou neste navegador: o quadro não abre anônimo, porque
+  // alteração sem autor não serve de registro.
+  if (precisaRegistro) return <RegistroInicial />;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexWrap: 'wrap', alignItems: 'stretch' }}>
@@ -238,22 +252,26 @@ export default function App() {
                         <option value="categoria">Por categoria</option>
                       </select>
                     </div>
-                    <div className="field" style={{ flex: '1 1 150px', height: 40 }}>
-                      <label className="sr-only" htmlFor="usuario-c">
-                        Usuário desta sessão
-                      </label>
-                      <select
-                        id="usuario-c"
-                        value={usuarioAtual.id}
-                        onChange={(e) => definirUsuarioAtual(e.target.value)}
+                    {multiusuario ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ flex: '1 1 150px', height: 40 }}
+                        onClick={() => void sairDaConta()}
                       >
-                        {estado.usuarios.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.nome}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                        Sair ({usuarioAtual.nome})
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ flex: '1 1 150px', height: 40 }}
+                        onClick={() => setTrocaAberta(true)}
+                        title="Trocar quem está registrando"
+                      >
+                        {assinatura(usuarioAtual.funcao, usuarioAtual.nome)}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn"
@@ -404,22 +422,69 @@ export default function App() {
           )}
 
           <div style={{ flex: '0 0 auto', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div className="field" style={{ width: 190 }}>
-              <label className="sr-only" htmlFor="usuario">
-                Usuário desta sessão
-              </label>
-              <select
-                id="usuario"
-                value={usuarioAtual.id}
-                onChange={(e) => definirUsuarioAtual(e.target.value)}
+            {multiusuario ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {presentes.length > 1 && (
+                  <span
+                    aria-label={`${presentes.length} pessoas com o quadro aberto: ${presentes.join(', ')}`}
+                    title={presentes.join(', ')}
+                    style={{ display: 'flex', alignItems: 'center' }}
+                  >
+                    {presentes.slice(0, 4).map((nome, i) => (
+                      <span
+                        key={nome}
+                        aria-hidden="true"
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: '50%',
+                          background: 'var(--color-plum-700)',
+                          color: 'var(--color-plum-100)',
+                          border: '2px solid var(--surface)',
+                          marginLeft: i === 0 ? 0 : -9,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 10,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {iniciais(nome)}
+                      </span>
+                    ))}
+                  </span>
+                )}
+                <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                  {usuarioAtual.nome}
+                </span>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ height: 34, padding: '0 10px', fontSize: 11.5 }}
+                  onClick={() => void sairDaConta()}
+                >
+                  Sair
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn"
+                style={{ height: 36, maxWidth: 230 }}
+                onClick={() => setTrocaAberta(true)}
+                title={`${FUNCAO_DESCRICAO[usuarioAtual.funcao]} — trocar quem está registrando`}
               >
-                {estado.usuarios.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.nome} · {FUNCAO_LABEL[u.funcao]}
-                  </option>
-                ))}
-              </select>
-            </div>
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {assinatura(usuarioAtual.funcao, usuarioAtual.nome)}
+                </span>
+              </button>
+            )}
             <button
               type="button"
               className="btn btn--icon"
@@ -455,6 +520,35 @@ export default function App() {
             </button>
           </div>
         </header>
+        )}
+
+        {erroGravacao && (
+          <div
+            role="alert"
+            style={{
+              background: 'var(--alert-soft)',
+              borderBottom: '1px solid var(--color-late)',
+              color: 'var(--alert-text)',
+              padding: '9px 24px',
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <span style={{ flex: '1 1 auto' }}>
+              ⚠ {erroGravacao} — a alteração pode não ter chegado ao servidor. Recarregue a
+              página e confira antes de continuar.
+            </span>
+            <button
+              type="button"
+              className="btn"
+              style={{ height: 30, padding: '0 10px', fontSize: 11.5 }}
+              onClick={limparErroGravacao}
+            >
+              Dispensar
+            </button>
+          </div>
         )}
 
         <div
@@ -529,6 +623,7 @@ export default function App() {
       {medicacaoDe && (
         <ModalMedicacoes paciente={medicacaoDe} onFechar={() => setMedicacaoDe(null)} />
       )}
+      {trocaAberta && <RegistroInicial onFechar={() => setTrocaAberta(false)} />}
     </div>
   );
 }
@@ -710,15 +805,20 @@ function PaginaAuditoria() {
                 {iniciais(a.usuarioNome)}
               </span>
               <span style={{ flex: '1 1 auto', minWidth: 0 }}>
-                <strong>{a.usuarioNome}</strong> — {a.acao.replace(/_/g, ' ')}
+                <strong>
+                  {assinaturaCompleta(a.usuarioFuncao, a.usuarioNome, a.timestamp)}
+                </strong>
+                <br />
+                {a.acao.replace(/_/g, ' ')}
                 {paciente ? ` · ${paciente.nome}` : ''}
                 {a.campo ? ` · ${a.campo}` : ''}
-                {a.valorAnterior || a.valorNovo
-                  ? ` · de “${a.valorAnterior ?? '—'}” para “${a.valorNovo ?? '—'}”`
-                  : ''}
-              </span>
-              <span style={{ flex: '0 0 auto', color: 'var(--text-dim)' }}>
-                {horaHM(a.timestamp)}
+                {a.valorAnterior && a.valorNovo
+                  ? ` · de “${a.valorAnterior}” para “${a.valorNovo}”`
+                  : a.valorNovo
+                    ? ` · ${a.valorNovo}`
+                    : a.valorAnterior
+                      ? ` · era “${a.valorAnterior}”`
+                      : ''}
               </span>
             </div>
           );

@@ -15,17 +15,33 @@ import type {
   Desfecho,
   EstadoApp,
   ExameProgramacao,
+  FuncaoUsuario,
   Leito,
   Medicacao,
   Paciente,
   Sessao,
   Usuario,
 } from '../types';
-import { obterStorage, supabaseConfigurado, type Backend } from '../services/storage';
+import { FUNCAO_LABEL } from '../types';
+import { obterRepositorio, supabaseConfigurado, type Backend } from '../services/storage';
+import { ESTADO_VAZIO, persistirDiferencas } from '../services/repositorio';
+import {
+  acompanharPresenca,
+  aoMudarSessao,
+  entrarAnonimo,
+  entrarComSenha,
+  garantirUsuario,
+  identificar,
+  sair as sairDoSupabase,
+  sessaoAtual as sessaoAuthAtual,
+} from '../services/supabase';
 import { leitosPadrao } from '../services/seed';
-import { agoraIso, novoId } from '../lib/calc';
+import { agoraIso, assinatura, novoId } from '../lib/calc';
 
 export type Tema = 'claro' | 'escuro';
+
+/** A sessão de autenticação do Supabase, ou nenhuma. */
+type SessaoAuth = Awaited<ReturnType<typeof sessaoAuthAtual>>;
 
 interface Ctx {
   pronto: boolean;
@@ -36,6 +52,29 @@ interface Ctx {
   alternarTema(): void;
   usuarioAtual: Usuario;
   definirUsuarioAtual(id: string): void;
+  /**
+   * Registro inicial: a pessoa escolhe a função entre as cinco e diz o nome.
+   * Reaproveita o cadastro quando o nome já existe — dois "MR1 Pedro
+   * Nogueira" na auditoria seriam duas pessoas aos olhos de quem lê.
+   */
+  registrarIdentidade(funcao: FuncaoUsuario, nome: string): void;
+  /** Ninguém se identificou ainda neste navegador (modo local). */
+  precisaRegistro: boolean;
+
+  /**
+   * Entrada por conta. Só assume quando a entrada anônima não é possível —
+   * normalmente porque o projeto Supabase a tem desligada.
+   */
+  precisaLogin: boolean;
+  /** Motivo pelo qual a entrada automática não deu certo, se não deu. */
+  erroEntrada: string | null;
+  entrar(email: string, senha: string): Promise<void>;
+  sairDaConta(): Promise<void>;
+  /** Mensagem de falha de gravação, quando o banco recusa algo. */
+  erroGravacao: string | null;
+  limparErroGravacao(): void;
+  /** Nomes de quem está com o quadro aberto agora. */
+  presentes: string[];
 
   sessaoAtiva: Sessao;
   definirSessaoAtiva(id: string): void;
@@ -89,7 +128,8 @@ const CHAVE_USUARIO = 'cpn-controle:usuario';
 const CHAVE_SESSAO = 'cpn-controle:sessao';
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const storage = useMemo(() => obterStorage(), []);
+  const repo = useMemo(() => obterRepositorio(), []);
+  const multiusuario = supabaseConfigurado();
   const [estado, setEstado] = useState<EstadoApp | null>(null);
   const [tema, setTema] = useState<Tema>(
     () => (localStorage.getItem(CHAVE_TEMA) as Tema) ?? 'claro'
@@ -100,35 +140,108 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sessaoId, setSessaoId] = useState<string>(
     () => localStorage.getItem(CHAVE_SESSAO) ?? ''
   );
-  // Evita gravar de volta o estado que acabou de chegar de outro cliente.
-  const vindoDeFora = useRef(false);
+  // Último estado já gravado. O que for diferente dele é o que precisa ir ao
+  // banco — e o que chega de fora entra por aqui sem disparar nova gravação.
+  const persistido = useRef<EstadoApp | null>(null);
+  const [erroGravacao, setErroGravacao] = useState<string | null>(null);
+
+  const [sessaoAuth, setSessaoAuth] = useState<SessaoAuth>(null);
+  const [conferindoAuth, setConferindoAuth] = useState(multiusuario);
+  const [usuarioLogadoId, setUsuarioLogadoId] = useState<string | null>(null);
+  const [presentes, setPresentes] = useState<string[]>([]);
+  const [erroEntrada, setErroEntrada] = useState<string | null>(null);
+  const [identificacaoConferida, setIdentificacaoConferida] = useState(!multiusuario);
+
+  // Autenticação, só quando há Supabase configurado.
+  //
+  // Não há tela de senha na entrada: quem abre o app recebe uma sessão anônima
+  // do Supabase, e se identifica em seguida pela tela de registro inicial. A
+  // sessão anônima é uma sessão de verdade — tem token e `auth.uid()`, e o RLS
+  // continua valendo. A entrada por conta segue existindo para quando o
+  // serviço quiser trancar o quadro, e assume se a anônima estiver desligada
+  // no projeto.
+  useEffect(() => {
+    if (!multiusuario) return;
+    let vivo = true;
+    void sessaoAuthAtual().then(async (s) => {
+      if (!vivo) return;
+      if (s) {
+        setSessaoAuth(s);
+        setConferindoAuth(false);
+        return;
+      }
+      try {
+        await entrarAnonimo();
+        // a sessão chega pelo aoMudarSessao, abaixo
+      } catch (erro) {
+        if (!vivo) return;
+        setErroEntrada((erro as Error).message);
+        setConferindoAuth(false);
+      }
+    });
+    return aoMudarSessao((s) => {
+      setSessaoAuth(s);
+      setConferindoAuth(false);
+    });
+  }, [multiusuario]);
+
+  const autenticado = !multiusuario || sessaoAuth != null;
+
+  const recarregar = useCallback(async () => {
+    const novo = await repo.carregar();
+    persistido.current = novo;
+    setEstado(novo);
+  }, [repo]);
 
   useEffect(() => {
+    if (!autenticado) return;
     let vivo = true;
-    storage.carregar().then((e) => {
-      if (vivo) setEstado(e);
-    });
+    void repo
+      .carregar()
+      .then((e) => {
+        if (!vivo) return;
+        persistido.current = e;
+        setEstado(e);
+      })
+      .catch((erro: Error) => setErroGravacao(`Não foi possível carregar: ${erro.message}`));
     return () => {
       vivo = false;
     };
-  }, [storage]);
+  }, [repo, autenticado]);
+
+  // Procura o cadastro desta sessão. Sem cadastro, `usuarioLogadoId` fica nulo
+  // e a tela de registro inicial assume — é lá que a pessoa diz quem é.
+  useEffect(() => {
+    if (!multiusuario || !sessaoAuth) return;
+    let vivo = true;
+    void garantirUsuario(sessaoAuth)
+      .then((u) => {
+        if (!vivo) return;
+        setUsuarioLogadoId(u ? u.id : null);
+        setIdentificacaoConferida(true);
+      })
+      .catch(() => vivo && setIdentificacaoConferida(true));
+    return () => {
+      vivo = false;
+    };
+  }, [multiusuario, sessaoAuth]);
 
   useEffect(() => {
-    if (!storage.inscrever) return;
-    return storage.inscrever((e) => {
-      vindoDeFora.current = true;
-      setEstado(e);
+    if (!repo.inscrever || !autenticado) return;
+    return repo.inscrever(() => {
+      void recarregar();
     });
-  }, [storage]);
+  }, [repo, autenticado, recarregar]);
 
   useEffect(() => {
-    if (!estado) return;
-    if (vindoDeFora.current) {
-      vindoDeFora.current = false;
-      return;
-    }
-    void storage.salvar(estado);
-  }, [estado, storage]);
+    if (!estado || !persistido.current || estado === persistido.current) return;
+    const antes = persistido.current;
+    persistido.current = estado;
+    repo.salvarTudo?.(estado);
+    void persistirDiferencas(repo, antes, estado).catch((erro: Error) =>
+      setErroGravacao(`Não foi possível gravar: ${erro.message}`)
+    );
+  }, [estado, repo]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = tema;
@@ -149,23 +262,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [estado, sessaoId]);
 
   const usuarioAtual: Usuario = useMemo(() => {
-    const achado = estado?.usuarios.find((u) => u.id === usuarioId);
+    // Com login, quem registra é quem está autenticado — não há escolha.
+    const id = multiusuario ? usuarioLogadoId : usuarioId;
+    const achado = estado?.usuarios.find((u) => u.id === id);
     return (
       achado ??
       estado?.usuarios[0] ?? {
         id: 'u_desconhecido',
         nome: 'Usuário',
-        funcao: 'outra',
+        funcao: 'staff',
         ativo: true,
       }
     );
-  }, [estado, usuarioId]);
+  }, [estado, usuarioId, usuarioLogadoId, multiusuario]);
+
+  /** "MR1 Fulano de Tal" — o que vai nos campos de autoria exibidos. */
+  const assinaturaAtual = useMemo(
+    () => assinatura(usuarioAtual.funcao, usuarioAtual.nome),
+    [usuarioAtual]
+  );
+
+  useEffect(() => {
+    if (!multiusuario || !autenticado || !usuarioAtual.nome) return;
+    return acompanharPresenca(usuarioAtual.nome, setPresentes);
+    // Só o nome importa: reinscrever a cada render seria barulho no canal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiusuario, autenticado, usuarioAtual.nome]);
 
   const mutar = useCallback(
     (
       fn: (e: EstadoApp) => EstadoApp,
-      registro?: Omit<Ctx['estado']['auditoria'][number], 'id' | 'timestamp' | 'usuarioNome'> & {
+      registro?: Omit<
+        Ctx['estado']['auditoria'][number],
+        'id' | 'timestamp' | 'usuarioNome' | 'usuarioFuncao'
+      > & {
         usuarioNome?: string;
+        usuarioFuncao?: FuncaoUsuario;
       }
     ) => {
       setEstado((anterior) => {
@@ -181,6 +313,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
               timestamp: agoraIso(),
               usuarioNome: registro.usuarioNome ?? usuarioAtual.nome,
               usuarioId: registro.usuarioId ?? usuarioAtual.id,
+              // Congelada aqui: a linha da auditoria tem de continuar dizendo
+              // o que a pessoa era no dia, não o que é hoje.
+              usuarioFuncao: registro.usuarioFuncao ?? usuarioAtual.funcao,
             },
             ...proximo.auditoria,
           ],
@@ -197,26 +332,110 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const api: Ctx = {
     pronto: estado != null,
-    backend: storage.backend,
-    multiusuario: supabaseConfigurado(),
-    estado: estado ?? {
-      sessoes: [],
-      categorias: [],
-      leitos: [],
-      pacientes: [],
-      controles: [],
-      medicacoes: [],
-      exames: [],
-      usuarios: [],
-      auditoria: [],
-      config: { comorbidades: [], intervalosControleMin: [], turnos: [] },
+    backend: repo.backend,
+    multiusuario,
+    // A tela de senha só aparece quando a entrada anônima não é possível —
+    // tipicamente porque o projeto a tem desligada.
+    precisaLogin: multiusuario && !conferindoAuth && sessaoAuth == null,
+    erroEntrada,
+    entrar: async (email, senha) => {
+      await entrarComSenha(email, senha);
     },
+    sairDaConta: async () => {
+      await sairDoSupabase();
+      setUsuarioLogadoId(null);
+      setEstado(null);
+      persistido.current = null;
+    },
+    erroGravacao,
+    limparErroGravacao: () => setErroGravacao(null),
+    presentes,
+    estado: estado ?? ESTADO_VAZIO,
     tema,
     alternarTema: () => setTema((t) => (t === 'claro' ? 'escuro' : 'claro')),
     usuarioAtual,
     definirUsuarioAtual: (id) => {
       setUsuarioId(id);
       localStorage.setItem(CHAVE_USUARIO, id);
+    },
+
+    // Ninguém mexe no quadro sem dizer quem é, nos dois modos. No modo local a
+    // identificação mora no navegador; com banco, numa linha de `usuarios`
+    // amarrada à sessão.
+    precisaRegistro: multiusuario
+      ? sessaoAuth != null && identificacaoConferida && usuarioLogadoId == null
+      : estado != null && !estado.usuarios.some((u) => u.id === usuarioId),
+
+    registrarIdentidade: (funcao, nome) => {
+      const limpo = nome.trim().replace(/\s+/g, ' ');
+      if (!limpo) return;
+
+      // Com banco, a identificação é uma linha de `usuarios` amarrada à sessão
+      // de autenticação. Quem grava é o serviço, porque a política `self_insere`
+      // compara `auth_user_id` com `auth.uid()`.
+      if (multiusuario) {
+        if (!sessaoAuth) return;
+        void identificar(sessaoAuth, funcao, limpo)
+          .then(async (u) => {
+            if (!u) return;
+            setUsuarioLogadoId(u.id);
+            await recarregar();
+            await repo.registrarAuditoria({
+              id: novoId('aud'),
+              timestamp: agoraIso(),
+              usuarioId: u.id,
+              usuarioNome: u.nome,
+              usuarioFuncao: u.funcao,
+              acao: 'registro_inicial',
+              entidade: 'usuario',
+              valorNovo: `${FUNCAO_LABEL[funcao]} ${limpo}`,
+            });
+            await recarregar();
+          })
+          .catch((erro: Error) =>
+            setErroGravacao(`Não foi possível registrar a identificação: ${erro.message}`)
+          );
+        return;
+      }
+
+      const existente = estado?.usuarios.find(
+        (u) => u.nome.toLowerCase() === limpo.toLowerCase()
+      );
+      if (existente) {
+        // Mesma pessoa de volta. Se mudou de ano de residência, o cadastro
+        // acompanha; o que ela já registrou antes continua com a função de
+        // então.
+        if (existente.funcao !== funcao) {
+          mutar(
+            (e) => ({
+              ...e,
+              usuarios: e.usuarios.map((u) => (u.id === existente.id ? { ...u, funcao } : u)),
+            }),
+            {
+              acao: 'registro_inicial',
+              entidade: 'usuario',
+              campo: 'função',
+              valorAnterior: FUNCAO_LABEL[existente.funcao],
+              valorNovo: FUNCAO_LABEL[funcao],
+              usuarioNome: limpo,
+              usuarioFuncao: funcao,
+            }
+          );
+        }
+        setUsuarioId(existente.id);
+        localStorage.setItem(CHAVE_USUARIO, existente.id);
+        return;
+      }
+      const novo: Usuario = { id: novoId('u'), nome: limpo, funcao, ativo: true };
+      mutar((e) => ({ ...e, usuarios: [...e.usuarios, novo] }), {
+        acao: 'registro_inicial',
+        entidade: 'usuario',
+        valorNovo: `${FUNCAO_LABEL[funcao]} ${limpo}`,
+        usuarioNome: limpo,
+        usuarioFuncao: funcao,
+      });
+      setUsuarioId(novo.id);
+      localStorage.setItem(CHAVE_USUARIO, novo.id);
     },
 
     sessaoAtiva,
@@ -308,6 +527,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   horario: controleInicial.horario ?? agora,
                   responsavelNome: controleInicial.responsavelNome ?? usuarioAtual.nome,
                   responsavelId: controleInicial.responsavelId ?? usuarioAtual.id,
+                  responsavelFuncao: controleInicial.responsavelFuncao ?? usuarioAtual.funcao,
                 } as Controle,
               ]
             : e.controles,
@@ -337,7 +557,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   ...p,
                   ...mudancas,
                   atualizadoEm: agoraIso(),
-                  atualizadoPor: usuarioAtual.nome,
+                  atualizadoPor: assinaturaAtual,
                 }
               : p
           ),
@@ -381,7 +601,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   ...p,
                   categoriaId,
                   atualizadoEm: agoraIso(),
-                  atualizadoPor: usuarioAtual.nome,
+                  atualizadoPor: assinaturaAtual,
                 }
               : p
           ),
@@ -413,7 +633,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   ...p,
                   anamnese: texto,
                   atualizadoEm: agoraIso(),
-                  atualizadoPor: usuarioAtual.nome,
+                  atualizadoPor: assinaturaAtual,
                 }
               : p
           ),
@@ -449,7 +669,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     arquivadaEm: agoraIso(),
                     leitoId: null,
                     atualizadoEm: agoraIso(),
-                    atualizadoPor: usuarioAtual.nome,
+                    atualizadoPor: assinaturaAtual,
                   }
                 : p
             ),
@@ -480,7 +700,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   ...p,
                   dinamicaUterina: controle.dinamicaUterina ?? p.dinamicaUterina,
                   atualizadoEm: agoraIso(),
-                  atualizadoPor: usuarioAtual.nome,
+                  atualizadoPor: assinaturaAtual,
                 }
               : p
           ),
@@ -682,11 +902,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   ...x,
                   realizado: marcando,
                   realizadoEm: marcando ? agora : undefined,
-                  realizadoPor: marcando ? usuarioAtual.nome : undefined,
+                  realizadoPor: marcando ? assinaturaAtual : undefined,
                   // A última realização sobrevive ao desmarcar: é o histórico
                   // que interessa num exame que se repete.
                   ultimaRealizacaoEm: marcando ? agora : x.ultimaRealizacaoEm,
-                  ultimaRealizacaoPor: marcando ? usuarioAtual.nome : x.ultimaRealizacaoPor,
+                  ultimaRealizacaoPor: marcando ? assinaturaAtual : x.ultimaRealizacaoPor,
                 }
               : x
           ),
