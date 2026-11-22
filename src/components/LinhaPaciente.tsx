@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Controle, Paciente } from '../types';
 import { DU_LABEL, STATUS_LABEL } from '../types';
 import { useApp } from '../state/store';
@@ -46,6 +46,7 @@ export function LinhaPaciente({
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [leitoAberto, setLeitoAberto] = useState(false);
+  const refLeito = useRef<HTMLButtonElement>(null);
   const { estado, tema, alternarExame } = useApp();
 
   const categoria = estado.categorias.find((c) => c.id === paciente.categoriaId);
@@ -87,6 +88,7 @@ export function LinhaPaciente({
       <div style={{ display: 'grid', gridTemplateColumns: COLUNAS, gap: 12, alignItems: 'center' }}>
         <div style={{ position: 'relative' }}>
           <button
+            ref={refLeito}
             type="button"
             onClick={() => setLeitoAberto((v) => !v)}
             title="Editar situação, transferir, anamnese e arquivamento"
@@ -123,6 +125,7 @@ export function LinhaPaciente({
           {leitoAberto && (
             <MenuLeito
               paciente={paciente}
+              ancora={refLeito.current}
               onFechar={() => setLeitoAberto(false)}
               onAnamnese={onAnamnese}
               onEditar={onEditar}

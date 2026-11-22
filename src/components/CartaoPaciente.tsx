@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Paciente } from '../types';
 import { DU_LABEL, STATUS_LABEL } from '../types';
 import { useApp } from '../state/store';
@@ -35,6 +35,7 @@ export function CartaoPaciente({
 }) {
   const { estado, tema, alternarExame } = useApp();
   const [leitoAberto, setLeitoAberto] = useState(false);
+  const refLeito = useRef<HTMLButtonElement>(null);
   const [expandido, setExpandido] = useState(false);
 
   const categoria = estado.categorias.find((c) => c.id === paciente.categoriaId);
@@ -80,6 +81,7 @@ export function CartaoPaciente({
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ position: 'relative', flex: '0 0 auto' }}>
           <button
+            ref={refLeito}
             type="button"
             onClick={() => setLeitoAberto((v) => !v)}
             aria-expanded={leitoAberto}
@@ -114,6 +116,7 @@ export function CartaoPaciente({
           {leitoAberto && (
             <MenuLeito
               paciente={paciente}
+              ancora={refLeito.current}
               onFechar={() => setLeitoAberto(false)}
               onAnamnese={onAnamnese}
               onEditar={onEditar}
