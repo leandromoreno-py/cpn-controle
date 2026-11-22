@@ -31,11 +31,21 @@ jobs:
         # VITE_BASE: defina como "/nome-do-repositorio/" em
         # Settings → Secrets and variables → Actions → Variables,
         # a não ser que o repositório seja <usuario>.github.io.
+        #
+        # VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY NÃO entram aqui. Secret
+        # que não existe vira string VAZIA, e variável de ambiente vazia tem
+        # precedência sobre o .env.production — o build saía sem banco e o app
+        # publicado caía em modo local, cada navegador com seu quadro, sem um
+        # único erro para denunciar. Os valores vivem no .env.production.
         env:
           VITE_BASE: ${{ vars.VITE_BASE }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
+
+      # Rede de segurança para o que acabou de acontecer: se o pacote sair sem
+      # o endereço do banco, a publicação para aqui em vez de colocar no ar um
+      # app que parece funcionar e não compartilha nada.
+      - name: Conferir que o build saiu com o banco
+        run: node scripts/conferir-build.mjs
 
       - uses: actions/configure-pages@v5
 
