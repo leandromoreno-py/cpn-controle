@@ -8,8 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "verificar": "vite build --ssr scripts/verificar.tsx --outDir .verificar --logLevel error && node .verificar/verificar.js",
-    "verificar:tela": "vite build -c scripts/vite.tela.config.ts && node scripts/tela.mjs"
+    "verificar": "vite build --mode testes --ssr scripts/verificar.tsx --outDir .verificar --logLevel error && node .verificar/verificar.js",
+    "verificar:tela": "vite build --mode testes -c scripts/vite.tela.config.ts && node scripts/tela.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

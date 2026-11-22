@@ -2,7 +2,7 @@ import {
   idadeGestacional, paridade, situacaoControle, debitoUrinario,
   diureseAnterior, calcularBalanco, alertasClinicos, duracao, isoComHora,
   serieDoses, recortarSerie, horaHM,
-  assinatura, dataHoraPorExtenso, assinaturaCompleta,
+  assinatura, dataHoraPorExtenso, assinaturaCompleta, novoId,
 } from '../src/lib/calc';
 import type { EstadoApp, Medicacao } from '../src/types';
 import { FUNCOES, normalizarFuncao } from '../src/types';
@@ -210,6 +210,15 @@ const repoFalso = {
   salvarUsuario: async () => { chamadas.push('usuario'); },
   registrarAuditoria: async () => { chamadas.push('auditoria'); },
 };
+
+// --- identificadores
+// O banco tem as colunas `id` como uuid. Um prefixo como "p_" invalida o valor
+// e faz TODA gravação de registro novo ser recusada, sem o app parar: foi o
+// que aconteceu em produção, com um usuário criando e o outro não vendo.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+ok('novoId gera uuid válido', UUID.test(novoId()), novoId());
+ok('novoId ignora o prefixo pedido', UUID.test(novoId('paciente')), novoId('paciente'));
+ok('novoId não repete', new Set(Array.from({ length: 200 }, () => novoId())).size === 200);
 
 // --- assinatura: função + nome + quando
 const quando = new Date(2026, 10, 22, 14, 32).toISOString(); // 22/11/2026 14:32

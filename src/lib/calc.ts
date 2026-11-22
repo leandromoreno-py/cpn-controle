@@ -244,12 +244,31 @@ export function formatarNumero(v: number | undefined, casas = 0): string {
   return v.toFixed(casas).replace('.', ',');
 }
 
-export function novoId(prefixo = 'id'): string {
+/**
+ * Identificador de registro novo. **UUID puro, sem prefixo.**
+ *
+ * Havia um prefixo por tipo (`p_` para paciente, `aud_` para auditoria). No
+ * modo local era só texto e funcionava; no Supabase as colunas `id` são do
+ * tipo `uuid`, e o prefixo invalidava o valor — o banco recusava com
+ * `invalid input syntax for type uuid`, e TODA gravação de registro novo
+ * falhava. Um usuário criava algo, o outro não via.
+ *
+ * O parâmetro continua aceito para não mexer nas dezenas de chamadas, mas é
+ * ignorado de propósito: o tipo do registro se sabe pela tabela em que ele
+ * está, não por um enfeite dentro da chave primária.
+ *
+ * Ids antigos, gravados com prefixo no navegador, seguem válidos no modo
+ * local — lá o id é texto comum.
+ */
+export function novoId(_prefixo = 'id'): string {
   const c = globalThis.crypto;
-  if (c && 'randomUUID' in c) return `${prefixo}_${c.randomUUID()}`;
-  return `${prefixo}_${Date.now().toString(36)}${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
+  if (c && 'randomUUID' in c) return c.randomUUID();
+  // Sem crypto.randomUUID (navegador antigo, ou contexto sem HTTPS): monta um
+  // UUID v4 à mão, porque o formato é o que o banco exige.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
 }
 
 
