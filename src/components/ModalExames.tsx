@@ -25,7 +25,7 @@ export function ModalExames({
   paciente: Paciente;
   onFechar(): void;
 }) {
-  const { estado, adicionarExame, alternarExame, removerExame } = useApp();
+  const { estado, adicionarExame, alternarExame, removerExame, repetirExame } = useApp();
 
   const [texto, setTexto] = useState('');
   const [horario, setHorario] = useState('');
@@ -218,6 +218,12 @@ export function ModalExames({
                         {e.realizadoEm ? ` às ${horaHM(e.realizadoEm)}` : ''}
                       </span>
                     )}
+                    {!e.realizado && e.ultimaRealizacaoEm && (
+                      <span style={{ display: 'block', color: 'var(--text-dim)', fontSize: 11 }}>
+                        última às {horaHM(e.ultimaRealizacaoEm)}
+                        {e.ultimaRealizacaoPor ? ` por ${e.ultimaRealizacaoPor}` : ''}
+                      </span>
+                    )}
                   </span>
                 </label>
 
@@ -232,6 +238,17 @@ export function ModalExames({
                   {e.horarioProgramado ?? '—'}
                 </span>
 
+                {e.realizado && (
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ flex: '0 0 auto', height: 32, padding: '0 10px', fontSize: 11.5 }}
+                    onClick={() => repetirExame(e)}
+                    title="Voltar para pendente, guardando o horário desta realização"
+                  >
+                    Repetir
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn btn--icon"
@@ -247,8 +264,10 @@ export function ModalExames({
           </div>
         )}
         <p style={{ margin: '10px 0 0', color: 'var(--text-dim)', fontSize: 11.5 }}>
-          Marcar como realizado grava quem marcou e o horário. Remover tira o item da lista
-          e fica registrado no histórico de alterações.
+          Marcar como realizado grava quem marcou e o horário. <strong>Repetir</strong>
+          devolve o item para pendente guardando o horário da última realização — é o que
+          serve para cardiotocografia, glicemia e outros controles que se repetem no
+          plantão. Remover tira o item da lista e fica no histórico de alterações.
         </p>
       </div>
     </Modal>

@@ -133,6 +133,8 @@ export interface Medicacao {
   inicio?: string; // ISO
   intervaloMin?: number;
   proximaDose?: string; // ISO — calculada
+  ultimaDoseEm?: string; // ISO
+  observacao?: string;
   status: 'em_curso' | 'suspensa' | 'concluida';
 }
 
@@ -144,6 +146,13 @@ export interface ExameProgramacao {
   realizado: boolean;
   realizadoEm?: string;
   realizadoPor?: string;
+  /**
+   * Horário da ÚLTIMA vez que foi feito, preservado mesmo quando o item volta a
+   * pendente. É o que permite ver "últ. 14:32" numa cardiotocografia que se
+   * repete ao longo do plantão.
+   */
+  ultimaRealizacaoEm?: string;
+  ultimaRealizacaoPor?: string;
 }
 
 export interface Paciente {

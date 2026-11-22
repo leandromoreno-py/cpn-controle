@@ -38,6 +38,7 @@ export function LinhaPaciente({
   onAnamnese,
   onEditar,
   onExames,
+  onMedicacoes,
   onEncerrar,
 }: {
   paciente: Paciente;
@@ -45,6 +46,7 @@ export function LinhaPaciente({
   onAnamnese(p: Paciente): void;
   onEditar(p: Paciente): void;
   onExames(p: Paciente): void;
+  onMedicacoes(p: Paciente): void;
   onEncerrar(p: Paciente): void;
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
@@ -139,6 +141,7 @@ export function LinhaPaciente({
               onAnamnese={onAnamnese}
               onEditar={onEditar}
               onExames={onExames}
+              onMedicacoes={onMedicacoes}
               onEncerrar={onEncerrar}
             />
           )}
@@ -322,6 +325,14 @@ export function LinhaPaciente({
                 >
                   Exames e programações
                 </ItemMenu>
+                <ItemMenu
+                  onClick={() => {
+                    setMenuAberto(false);
+                    onMedicacoes(paciente);
+                  }}
+                >
+                  Medicações em uso
+                </ItemMenu>
                 <div style={{ height: 1, background: 'var(--border)', margin: '4px 2px' }} />
                 <ItemMenu
                   destaque
@@ -445,8 +456,11 @@ export function LinhaPaciente({
                     color: e.realizado ? 'var(--text-dim)' : 'var(--color-plum-600)',
                   }}
                 >
-                  {e.horarioProgramado ?? ''}
-                  {e.realizado ? ' ✓' : ''}
+                  {e.realizado
+                    ? `${e.realizadoEm ? horaHM(e.realizadoEm) : (e.horarioProgramado ?? '')} ✓`
+                    : e.ultimaRealizacaoEm
+                      ? `últ. ${horaHM(e.ultimaRealizacaoEm)}`
+                      : (e.horarioProgramado ?? '')}
                 </span>
               </label>
             ))}

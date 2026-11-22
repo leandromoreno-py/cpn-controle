@@ -10,6 +10,7 @@ import { ModalAnamnese } from './components/ModalAnamnese';
 import { ModalEditarPaciente } from './components/ModalEditarPaciente';
 import { ModalEncerrar } from './components/ModalEncerrar';
 import { ModalExames } from './components/ModalExames';
+import { ModalMedicacoes } from './components/ModalMedicacoes';
 import { ConfigLeitos } from './components/ConfigLeitos';
 import { ConfigCategorias } from './components/ConfigCategorias';
 import { horaHM, situacaoControle } from './lib/calc';
@@ -64,6 +65,7 @@ export default function App() {
   const [editorAberto, setEditorAberto] = useState(false);
   const [encerrando, setEncerrando] = useState<Paciente | null>(null);
   const [exameDe, setExameDe] = useState<Paciente | null>(null);
+  const [medicacaoDe, setMedicacaoDe] = useState<Paciente | null>(null);
 
   const ativas = estado.pacientes.filter(
     (p) => !p.arquivada && p.sessaoId === sessaoAtiva.id
@@ -485,6 +487,7 @@ export default function App() {
               setEditorAberto(true);
             }}
             onExames={setExameDe}
+            onMedicacoes={setMedicacaoDe}
             onEncerrar={setEncerrando}
           />
         )}
@@ -523,6 +526,9 @@ export default function App() {
         <ModalEncerrar paciente={encerrando} onFechar={() => setEncerrando(null)} />
       )}
       {exameDe && <ModalExames paciente={exameDe} onFechar={() => setExameDe(null)} />}
+      {medicacaoDe && (
+        <ModalMedicacoes paciente={medicacaoDe} onFechar={() => setMedicacaoDe(null)} />
+      )}
     </div>
   );
 }

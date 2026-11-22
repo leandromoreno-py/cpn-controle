@@ -21,6 +21,7 @@ export function QuadroPacientes({
   onAnamnese,
   onEditar,
   onExames,
+  onMedicacoes,
   onEncerrar,
 }: {
   busca: string;
@@ -33,6 +34,7 @@ export function QuadroPacientes({
   onAnamnese(p: Paciente): void;
   onEditar(p: Paciente): void;
   onExames(p: Paciente): void;
+  onMedicacoes(p: Paciente): void;
   onEncerrar(p: Paciente): void;
 }) {
   const { estado, tema, sessaoAtiva } = useApp();
@@ -113,6 +115,7 @@ export function QuadroPacientes({
             onAnamnese={onAnamnese}
             onEditar={onEditar}
             onExames={onExames}
+            onMedicacoes={onMedicacoes}
             onEncerrar={onEncerrar}
           />
         ))}
@@ -195,6 +198,7 @@ export function QuadroPacientes({
             onAnamnese={onAnamnese}
             onEditar={onEditar}
             onExames={onExames}
+            onMedicacoes={onMedicacoes}
             onEncerrar={onEncerrar}
           />
         ))}

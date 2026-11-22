@@ -26,6 +26,7 @@ export function CartaoPaciente({
   onAnamnese,
   onEditar,
   onExames,
+  onMedicacoes,
   onEncerrar,
 }: {
   paciente: Paciente;
@@ -33,6 +34,7 @@ export function CartaoPaciente({
   onAnamnese(p: Paciente): void;
   onEditar(p: Paciente): void;
   onExames(p: Paciente): void;
+  onMedicacoes(p: Paciente): void;
   onEncerrar(p: Paciente): void;
 }) {
   const { estado, tema, alternarExame } = useApp();
@@ -123,6 +125,7 @@ export function CartaoPaciente({
               onAnamnese={onAnamnese}
               onEditar={onEditar}
               onExames={onExames}
+              onMedicacoes={onMedicacoes}
               onEncerrar={onEncerrar}
             />
           )}
@@ -298,7 +301,26 @@ export function CartaoPaciente({
       {expandido && (
         <>
           <div>
-            <Rotulo>Medicações em curso</Rotulo>
+            <Rotulo>
+              Medicações em curso{' '}
+              <button
+                type="button"
+                onClick={() => onMedicacoes(paciente)}
+                style={{
+                  border: 0,
+                  background: 'transparent',
+                  color: 'var(--color-plum-600)',
+                  cursor: 'pointer',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  letterSpacing: 0,
+                  padding: 0,
+                }}
+              >
+                editar
+              </button>
+            </Rotulo>
             {meds.length === 0 ? (
               <span style={{ color: 'var(--text-dim)', fontSize: 11.5 }}>Nenhuma</span>
             ) : (
@@ -375,7 +397,11 @@ export function CartaoPaciente({
                         color: e.realizado ? 'var(--text-dim)' : 'var(--color-plum-600)',
                       }}
                     >
-                      {e.horarioProgramado ?? ''}
+                      {e.realizado
+                        ? `${e.realizadoEm ? horaHM(e.realizadoEm) : (e.horarioProgramado ?? '')} ✓`
+                        : e.ultimaRealizacaoEm
+                          ? `últ. ${horaHM(e.ultimaRealizacaoEm)}`
+                          : (e.horarioProgramado ?? '')}
                     </span>
                   </label>
                 ))}

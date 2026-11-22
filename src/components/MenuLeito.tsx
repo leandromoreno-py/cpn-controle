@@ -25,6 +25,7 @@ export function MenuLeito({
   onAnamnese,
   onEditar,
   onExames,
+  onMedicacoes,
   onEncerrar,
 }: {
   paciente: Paciente;
@@ -34,6 +35,7 @@ export function MenuLeito({
   onAnamnese(p: Paciente): void;
   onEditar(p: Paciente): void;
   onExames(p: Paciente): void;
+  onMedicacoes(p: Paciente): void;
   onEncerrar(p: Paciente): void;
 }) {
   const { estado, tema, sessaoAtiva, mudarCategoria, transferirLeito, renomearLeito } =
@@ -290,6 +292,14 @@ export function MenuLeito({
                 }}
               >
                 Exames e programações
+              </Item>
+              <Item
+                onClick={() => {
+                  onFechar();
+                  onMedicacoes(paciente);
+                }}
+              >
+                Medicações em uso
               </Item>
               <Item
                 destaque

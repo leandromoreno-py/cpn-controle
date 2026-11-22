@@ -17,8 +17,8 @@ Persistência em `localStorage` por enquanto. A etapa 4 (Supabase) troca a
 implementação dentro de `src/services/`, sem tocar nos componentes. O schema já está
 escrito em `supabase/schema.sql`.
 
-Pendentes: medicações editáveis pela UI, desfecho e alta com formulário próprio,
-passagem de plantão, partograma, exportação CSV. Ver `docs/prompts-etapas.md`.
+Pendentes: passagem de plantão, partograma, exportação CSV. Ver
+`docs/prompts-etapas.md`.
 
 ## Decisões de produto — não mude sem conversar
 
@@ -200,6 +200,28 @@ não cobre o plantão: programação nasce no meio do turno.
 Marcar como realizado grava quem marcou e o horário; remover tira da lista e fica no
 histórico de alterações. As checkboxes no quadro e na página Exames continuam
 funcionando para marcar e desmarcar sem abrir nada.
+
+**O horário da última realização sobrevive ao desmarcar** (`ultimaRealizacaoEm`). É o
+que permite ver `últ. 14:32` ao lado de uma cardiotocografia que se repete ao longo do
+plantão. O botão **Repetir**, na tela de exames, devolve o item a pendente guardando
+esse horário — serve para CTG, glicemia capilar, PA de 15 em 15 min e tudo que se
+refaz no turno.
+
+No quadro e no cartão, a coluna de horário mostra: o horário em que foi feito, quando
+realizado; `últ. HH:MM` quando já foi feito antes e está pendente de novo; e o horário
+programado quando nunca foi feito.
+
+### Medicações
+
+`ModalMedicacoes`, aberto pelo menu ⋯, pela caixa do leito ou pelo "editar" ao lado de
+Medicações no cartão. Acrescentar, editar dose, via, vazão e próxima dose, registrar
+**Dose agora** (que grava o horário e recalcula a próxima pelo intervalo), suspender,
+concluir e remover.
+
+Atalhos para o que se usa no centro: ocitocina, sulfato de magnésio (com a observação
+das checagens), ampicilina, dipirona, betametasona e misoprostol.
+
+Medicação com próxima dose vencida continua aparecendo em laranja no chip da linha.
 
 ### Arquivamento preserva tudo
 

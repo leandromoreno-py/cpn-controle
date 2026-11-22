@@ -16,6 +16,7 @@ import type {
   EstadoApp,
   ExameProgramacao,
   Leito,
+  Medicacao,
   Paciente,
   Sessao,
   Usuario,
@@ -64,6 +65,12 @@ interface Ctx {
   alternarExame(exame: ExameProgramacao): void;
   adicionarExame(pacienteId: string, texto: string, horario?: string): void;
   removerExame(exame: ExameProgramacao): void;
+  repetirExame(exame: ExameProgramacao, horario?: string): void;
+
+  adicionarMedicacao(med: Omit<Medicacao, 'id'>): void;
+  atualizarMedicacao(id: string, mudancas: Partial<Medicacao>, campo?: string): void;
+  registrarDose(med: Medicacao): void;
+  removerMedicacao(med: Medicacao): void;
 
   adicionarUsuario(u: Omit<Usuario, 'id'>): Usuario;
 }
@@ -663,6 +670,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
 
     alternarExame: (exame) => {
+      const marcando = !exame.realizado;
+      const agora = agoraIso();
       mutar(
         (e) => ({
           ...e,
@@ -670,9 +679,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             x.id === exame.id
               ? {
                   ...x,
-                  realizado: !x.realizado,
-                  realizadoEm: !x.realizado ? agoraIso() : undefined,
-                  realizadoPor: !x.realizado ? usuarioAtual.nome : undefined,
+                  realizado: marcando,
+                  realizadoEm: marcando ? agora : undefined,
+                  realizadoPor: marcando ? usuarioAtual.nome : undefined,
+                  // A última realização sobrevive ao desmarcar: é o histórico
+                  // que interessa num exame que se repete.
+                  ultimaRealizacaoEm: marcando ? agora : x.ultimaRealizacaoEm,
+                  ultimaRealizacaoPor: marcando ? usuarioAtual.nome : x.ultimaRealizacaoPor,
                 }
               : x
           ),
@@ -717,6 +730,102 @@ export function AppProvider({ children }: { children: ReactNode }) {
           pacienteId: exame.pacienteId,
           campo: 'programação removida',
           valorAnterior: exame.texto,
+        })
+      );
+    },
+
+    /** Reabre um exame já feito, preservando o horário da última realização. */
+    repetirExame: (exame, horario) => {
+      mutar(
+        (e) => ({
+          ...e,
+          exames: e.exames.map((x) =>
+            x.id === exame.id
+              ? {
+                  ...x,
+                  realizado: false,
+                  realizadoEm: undefined,
+                  realizadoPor: undefined,
+                  horarioProgramado: horario || x.horarioProgramado,
+                }
+              : x
+          ),
+        }),
+        auditar('exame_check', {
+          pacienteId: exame.pacienteId,
+          campo: 'repetir',
+          valorNovo: exame.texto,
+        })
+      );
+    },
+
+    adicionarMedicacao: (med) => {
+      mutar(
+        (e) => ({ ...e, medicacoes: [...e.medicacoes, { ...med, id: novoId('m') }] }),
+        auditar('medicacao', {
+          pacienteId: med.pacienteId,
+          campo: 'nova',
+          valorNovo: `${med.nome}${med.dose ? ' ' + med.dose : ''}`,
+        })
+      );
+    },
+
+    atualizarMedicacao: (id, mudancas, campo) => {
+      mutar((e) => {
+        const antes = e.medicacoes.find((m) => m.id === id);
+        return {
+          ...e,
+          medicacoes: e.medicacoes.map((m) => (m.id === id ? { ...m, ...mudancas } : m)),
+          auditoria: [
+            {
+              id: novoId('aud'),
+              timestamp: agoraIso(),
+              usuarioId: usuarioAtual.id,
+              usuarioNome: usuarioAtual.nome,
+              acao: 'medicacao' as AcaoAuditoria,
+              pacienteId: antes?.pacienteId,
+              campo: campo ?? 'edição',
+              valorAnterior: antes?.nome,
+              valorNovo: String(
+                (mudancas as Record<string, unknown>)[campo ?? ''] ?? antes?.nome ?? ''
+              ),
+            },
+            ...e.auditoria,
+          ],
+        };
+      });
+    },
+
+    /** Dose administrada agora: recalcula a próxima pelo intervalo. */
+    registrarDose: (med) => {
+      const agora = new Date();
+      const proxima = med.intervaloMin
+        ? new Date(agora.getTime() + med.intervaloMin * 60_000).toISOString()
+        : undefined;
+      mutar(
+        (e) => ({
+          ...e,
+          medicacoes: e.medicacoes.map((m) =>
+            m.id === med.id
+              ? { ...m, ultimaDoseEm: agora.toISOString(), proximaDose: proxima }
+              : m
+          ),
+        }),
+        auditar('medicacao', {
+          pacienteId: med.pacienteId,
+          campo: 'dose administrada',
+          valorNovo: med.nome,
+        })
+      );
+    },
+
+    removerMedicacao: (med) => {
+      mutar(
+        (e) => ({ ...e, medicacoes: e.medicacoes.filter((m) => m.id !== med.id) }),
+        auditar('medicacao', {
+          pacienteId: med.pacienteId,
+          campo: 'removida',
+          valorAnterior: med.nome,
         })
       );
     },
