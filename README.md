@@ -32,8 +32,15 @@ próxima (São Paulo, se houver) — isso reduz a demora de cada gravação.
 ### 2. Criar as tabelas
 
 **SQL Editor → New query**, cole o conteúdo de [`supabase/schema.sql`](supabase/schema.sql)
-e execute. O arquivo pode ser reexecutado sem perigo: tudo é `if not exists`, e as
-colunas acrescentadas depois entram pelo bloco de migração no fim.
+e execute. O arquivo pode ser reexecutado sem perigo: tudo é `if not exists` ou
+verificado antes de inserir, e as colunas acrescentadas depois entram pelo bloco de
+migração no fim.
+
+O arquivo cria as tabelas, o RLS **e os privilégios de tabela** (`grant`). Os dois são
+necessários e fazem coisas diferentes: o RLS decide quem pode o quê, o `grant` decide
+se o papel pode sequer falar com a tabela. Faltando o `grant`, tudo responde
+`permission denied for table` — e a mensagem não diz que o problema é privilégio, o que
+manda a pessoa depurar o RLS à toa.
 
 Confira em **Table Editor** que apareceram: `sessoes`, `categorias`, `leitos`,
 `pacientes`, `controles`, `medicacoes`, `exames_programacoes`, `auditoria`, `usuarios`
@@ -57,8 +64,11 @@ então vale corrigir antes da pessoa começar a registrar. Dá para já deixar p
 { "nome": "Fulano de Tal", "funcao": "mr1" }
 ```
 
-Para alguém poder mexer em leitos, categorias e listas, marque `admin = true` na linha
-dessa pessoa em `usuarios`.
+**Quem entra primeiro vira administrador** — é quem pode mexer em leitos,
+categorias e listas. Não há autocadastro, então quem entra primeiro é quem está
+montando o serviço; não precisa editar a tabela à mão. Para dar o mesmo poder a outra
+pessoa depois, marque `admin = true` na linha dela em `usuarios` (um administrador pode
+fazer isso pelo app; ninguém consegue marcar em si mesmo).
 
 ### 4. Apontar o app para o projeto
 

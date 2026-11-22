@@ -33,7 +33,6 @@ create table if not exists usuarios (
   auth_user_id uuid unique references auth.users (id) on delete set null,
   nome text not null,
   funcao text not null default 'staff',
-  funcao_livre text,
   registro_profissional text,
   email text,
   admin boolean not null default false,
@@ -218,12 +217,17 @@ create table if not exists config (
 );
 
 -- -------------------------------------------- updated_at automático
-create or replace function tocar_updated_at() returns trigger as $$
+-- search_path vazio e nomes qualificados: sem isso, quem puder criar um objeto
+-- num schema anterior no caminho faz a função chamar o objeto dele.
+create or replace function public.tocar_updated_at() returns trigger
+  language plpgsql
+  set search_path = ''
+as $$
 begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql;
+$$;
 
 do $$
 declare t text;
@@ -233,7 +237,7 @@ begin
     execute format(
       'drop trigger if exists %I_updated_at on %I;
        create trigger %I_updated_at before update on %I
-       for each row execute function tocar_updated_at();',
+       for each row execute function public.tocar_updated_at();',
       t, t, t, t
     );
   end loop;
@@ -251,12 +255,15 @@ alter table exames_programacoes enable row level security;
 alter table auditoria enable row level security;
 alter table config enable row level security;
 
-create or replace function sou_admin() returns boolean as $$
+create or replace function public.sou_admin() returns boolean
+  language sql stable security definer
+  set search_path = ''
+as $$
   select coalesce(
-    (select admin from usuarios where auth_user_id = auth.uid()),
+    (select u.admin from public.usuarios u where u.auth_user_id = auth.uid()),
     false
   );
-$$ language sql stable security definer;
+$$;
 
 -- Dados clínicos: qualquer usuário autenticado lê e escreve.
 -- Toda alteração fica rastreada na auditoria.
@@ -299,6 +306,77 @@ begin
   end loop;
 end $$;
 
+-- Medicação e exame podem ser removidos: tirar da lista uma programação errada
+-- é rotina de plantão, e a remoção fica no histórico de alterações. Sem política
+-- de delete a remoção não dá erro — afeta zero linhas, e o item reaparece na
+-- recarga seguinte, o que parece defeito do app.
+do $$
+declare t text;
+begin
+  foreach t in array array['medicacoes', 'exames_programacoes']
+  loop
+    execute format('drop policy if exists autenticado_remove on %I;', t);
+    execute format(
+      'create policy autenticado_remove on %I for delete to authenticated using (true);', t
+    );
+  end loop;
+end $$;
+
+-- `pacientes` e `controles` seguem SEM política de delete, de propósito:
+-- "arquivamento preserva tudo, nada é excluído" deixa de ser promessa do app e
+-- passa a ser regra do banco. A única exclusão legítima de paciente vem da
+-- exclusão de uma sessão, e essa desce pelo `on delete cascade`, que não passa
+-- por RLS. Um sinal vital registrado não se apaga.
+
+-- Ovo e galinha: `usuarios` só aceitava escrita de admin, e o primeiro admin é
+-- uma linha de `usuarios`. Ninguém conseguiria se cadastrar nunca. Cada pessoa
+-- pode criar e manter a PRÓPRIA linha.
+drop policy if exists self_insere on usuarios;
+create policy self_insere on usuarios for insert to authenticated
+  with check (auth_user_id = auth.uid());
+
+drop policy if exists self_altera on usuarios;
+create policy self_altera on usuarios for update to authenticated
+  using (auth_user_id = auth.uid())
+  with check (auth_user_id = auth.uid());
+
+-- Quem entra primeiro vira administrador, senão não haveria quem cadastrasse
+-- leitos e categorias. Como não existe autocadastro (as contas são criadas pela
+-- administração), quem entra primeiro é quem está montando o serviço.
+create or replace function public.primeiro_usuario_e_admin() returns trigger
+  language plpgsql security definer
+  set search_path = ''
+as $$
+begin
+  if not exists (select 1 from public.usuarios where admin) then
+    new.admin := true;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists usuarios_primeiro_admin on usuarios;
+create trigger usuarios_primeiro_admin before insert on usuarios
+  for each row execute function public.primeiro_usuario_e_admin();
+
+-- `self_altera` deixaria a pessoa marcar admin em si mesma. O RLS não enxerga
+-- coluna, então quem barra é o gatilho.
+create or replace function public.proteger_papel_admin() returns trigger
+  language plpgsql security definer
+  set search_path = ''
+as $$
+begin
+  if new.admin is distinct from old.admin and not public.sou_admin() then
+    raise exception 'só um administrador pode conceder ou retirar o papel de administrador';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists usuarios_proteger_admin on usuarios;
+create trigger usuarios_proteger_admin before update on usuarios
+  for each row execute function public.proteger_papel_admin();
+
 -- Auditoria: somente inserção. Nem update nem delete, para ninguém.
 drop policy if exists auditoria_le on auditoria;
 create policy auditoria_le on auditoria for select to authenticated using (true);
@@ -306,37 +384,94 @@ drop policy if exists auditoria_insere on auditoria;
 create policy auditoria_insere on auditoria for insert to authenticated with check (true);
 -- Não existem políticas de update/delete: com RLS ativo, isso já as proíbe.
 
+-- ---------------------------------------------------------------- GRANT
+-- O RLS decide QUEM pode o quê. O GRANT decide se o papel pode sequer falar
+-- com a tabela. Faltando o GRANT, o PostgREST responde "permission denied for
+-- table" antes de avaliar qualquer política — e a mensagem não diz que o
+-- problema é privilégio de tabela, o que manda a pessoa depurar o RLS à toa.
+--
+-- TRUNCATE ignora RLS: com ele, um usuário logado esvaziaria a auditoria, que é
+-- justamente a tabela que não pode ser apagada. Sai, junto com TRIGGER e
+-- REFERENCES, que o app não usa.
+revoke truncate, trigger, references on all tables in schema public from authenticated;
+revoke truncate, trigger, references on all tables in schema public from anon;
+
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+
+-- Tabelas criadas daqui para frente já nascem acessíveis.
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to authenticated;
+
+-- O app não tem nada a oferecer a quem não entrou.
+revoke all on all tables in schema public from anon;
+
+-- Função de gatilho não precisa de EXECUTE para disparar: o gatilho a chama
+-- pelo dono da tabela. Com EXECUTE para `anon` e `authenticated`, ela também
+-- virava endpoint REST (/rest/v1/rpc/...), chamada que ninguém deveria poder
+-- fazer à mão.
+revoke all on function public.primeiro_usuario_e_admin() from public, anon, authenticated;
+revoke all on function public.proteger_papel_admin() from public, anon, authenticated;
+revoke all on function public.tocar_updated_at() from public, anon, authenticated;
+
+-- `sou_admin()` é diferente: as próprias políticas de RLS a chamam, e políticas
+-- são avaliadas com o papel de quem consulta. Fica só para `authenticated`, e o
+-- que devolve é um booleano sobre a própria pessoa.
+revoke all on function public.sou_admin() from public, anon;
+grant execute on function public.sou_admin() to authenticated;
+
 -- --------------------------------------------------------- realtime
-alter publication supabase_realtime add table pacientes;
-alter publication supabase_realtime add table controles;
-alter publication supabase_realtime add table medicacoes;
-alter publication supabase_realtime add table exames_programacoes;
-alter publication supabase_realtime add table leitos;
-alter publication supabase_realtime add table sessoes;
+-- "add table" dá erro se a tabela já está na publicação, então confere antes:
+-- é o que permite reexecutar o arquivo inteiro.
+do $$
+declare t text;
+begin
+  foreach t in array array['pacientes', 'controles', 'medicacoes',
+                           'exames_programacoes', 'leitos', 'sessoes']
+  loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table %I;', t);
+    end if;
+  end loop;
+end $$;
 
 -- ------------------------------------------------------- seed mínimo
-insert into categorias (nome, descricao, cor, ordem, padrao) values
-  ('Gestante',         null,          '#2563EB', 1, true),
-  ('Puérpera',         null,          '#C2185B', 2, true),
-  ('O.F.',             'Óbito fetal', '#0F766E', 3, true),
-  ('Aborto',           null,          '#1F2937', 4, true),
-  ('Não classificado', null,          '#9CA3AF', 5, true)
-on conflict do nothing;
+-- Não há unique em `nome` (o admin pode renomear categoria), então o
+-- "on conflict" não serviria: a checagem é explícita.
+insert into categorias (nome, descricao, cor, ordem, padrao)
+select v.nome, v.descricao, v.cor, v.ordem, true
+from (values
+  ('Gestante',         null::text,    '#2563EB', 1),
+  ('Puérpera',         null,          '#C2185B', 2),
+  ('O.F.',             'Óbito fetal', '#0F766E', 3),
+  ('Aborto',           null,          '#1F2937', 4),
+  ('Não classificado', null,          '#9CA3AF', 5)
+) as v(nome, descricao, cor, ordem)
+where not exists (select 1 from categorias c where c.nome = v.nome);
 
-insert into sessoes (nome, ordem) values ('Centro de Parto', 1)
-on conflict do nothing;
+-- A primeira sessão nasce uma vez. Se já existe qualquer sessão, não mexe:
+-- o usuário pode ter renomeado "Centro de Parto".
+insert into sessoes (nome, ordem)
+select 'Centro de Parto', 1
+where not exists (select 1 from sessoes);
 
+-- Os leitos vão para a sessão mais antiga, e não para a de nome "Centro de
+-- Parto": o nome é editável, e um rename não pode fazer o seed criar leitos
+-- numa sessão nova.
 insert into leitos (sessao_id, nome, tipo)
 select s.id, l, 'fixo'
-from sessoes s,
+from (select id from sessoes order by ordem, created_at limit 1) s,
      unnest(array['A','B','C','D','E','F','G','H','I','J','K','L']) as l
-where s.nome = 'Centro de Parto'
 on conflict (sessao_id, nome) do nothing;
 
 insert into leitos (sessao_id, nome, tipo)
 select s.id, 'Extra ' || n, 'extra'
-from sessoes s, generate_series(1, 3) as n
-where s.nome = 'Centro de Parto'
+from (select id from sessoes order by ordem, created_at limit 1) s,
+     generate_series(1, 3) as n
 on conflict (sessao_id, nome) do nothing;
 
 insert into config (chave, valor) values

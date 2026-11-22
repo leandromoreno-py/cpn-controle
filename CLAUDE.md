@@ -14,9 +14,10 @@ anamnese, edição de dados da paciente, encerramento de atendimento, sessões,
 configurações de leitos e categorias, exames, arquivadas, histórico de alterações e
 registro inicial com as cinco funções (MR1–MR3, Interno, Staff).
 
-Etapa 4 (Supabase) **escrita, não testada contra um projeto real** — falta só a
-configuração, descrita no README. Sem as variáveis de ambiente o app roda em modo
-local, um quadro por navegador.
+Etapa 4 (Supabase) aplicada num projeto real: tabelas, RLS, privilégios, realtime e
+seed conferidos no banco, políticas testadas uma a uma com papel `authenticated`
+simulado. Falta o teste de ponta a ponta pelo app, com conta de verdade. Sem as
+variáveis de ambiente o app roda em modo local, um quadro por navegador.
 
 Pendentes: passagem de plantão, partograma, exportação CSV. Ver
 `docs/prompts-etapas.md`.
@@ -278,7 +279,12 @@ residente — 1º ano" explica.
 
 Toda alteração grava autor, horário, campo, valor anterior e novo. Nenhuma tela edita
 ou apaga registros de auditoria, e o RLS do Supabase não tem política de update ou
-delete para essa tabela.
+delete para essa tabela. O `TRUNCATE` do papel `authenticated` também foi revogado —
+ele ignora RLS, e com ele um usuário logado esvaziaria a tabela inteira.
+
+`pacientes` e `controles` igualmente não têm política de delete: "nada é excluído"
+deixou de ser promessa do app e virou regra do banco. Medicação e exame podem ser
+removidos, porque tirar da lista uma programação errada é rotina de plantão.
 
 A linha é escrita por extenso: **`MR1 Fulano de Tal às 14:32 do dia 22/11/2026`**
 (`assinaturaCompleta`, em `src/lib/calc.ts`).
@@ -306,6 +312,24 @@ troca a sessão.
 A edição de dados **não** registra desfecho, e o encerramento **não** edita dados. A
 separação é deliberada: trocar a categoria de uma paciente é uma correção cadastral,
 registrar um óbito é um ato clínico com causa obrigatória e auditoria.
+
+### No Supabase, GRANT e RLS são duas coisas
+
+O RLS decide **quem pode o quê**; o `grant` decide se o papel pode **sequer falar com a
+tabela**. Faltando o `grant`, o PostgREST responde `permission denied for table` antes
+de avaliar qualquer política — e a mensagem não menciona privilégio de tabela, o que
+manda quem está depurando atrás do RLS à toa. O `schema.sql` cria os dois.
+
+Toda função `security definer` leva `set search_path = ''` e nomes qualificados por
+schema, e as funções de gatilho não têm `execute` para `anon` nem `authenticated`:
+gatilho dispara pelo dono da tabela, e com `execute` a função também viraria endpoint
+REST em `/rest/v1/rpc/`.
+
+**Quem entra primeiro vira administrador** (gatilho `usuarios_primeiro_admin`). Sem
+isso o cadastro era ovo e galinha: `usuarios` só aceitava escrita de admin, e o primeiro
+admin é uma linha de `usuarios`. Cada pessoa pode criar e manter a própria linha
+(`self_insere`, `self_altera`), mas não marcar `admin` em si mesma — o RLS não enxerga
+coluna, então quem barra é o gatilho `usuarios_proteger_admin`.
 
 ### Decisão em aberto
 
