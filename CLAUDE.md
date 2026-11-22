@@ -11,7 +11,8 @@ configuradas pela unidade. O banner no topo do app diz isso ao usuário.
 
 Etapas 1 a 3 implementadas: quadro de pacientes, admissão, modal de controles,
 anamnese, edição de dados da paciente, encerramento de atendimento, sessões,
-configurações de leitos e categorias, exames, arquivadas e histórico de alterações.
+configurações de leitos e categorias, exames, arquivadas, histórico de alterações e
+registro inicial com as cinco funções (MR1–MR3, Interno, Staff).
 
 Etapa 4 (Supabase) **escrita, não testada contra um projeto real** — falta só a
 configuração, descrita no README. Sem as variáveis de ambiente o app roda em modo
@@ -253,11 +254,40 @@ Medicação com próxima dose vencida continua aparecendo em laranja no chip da 
 Alta e transferência arquivam a paciente. **Nada é excluído.** O histórico inteiro fica
 e a paciente pode ser reaberta num leito livre.
 
+### Cinco funções fixas, e nada anônimo
+
+As funções são **MR1, MR2, MR3, Interno e Staff** — lista fechada, em
+`FuncaoUsuario`. Não há campo de função livre: é a sigla que entra na assinatura de
+cada alteração, e texto livre ali produziria dez grafias para a mesma coisa.
+
+O **registro inicial** (`RegistroInicial`) é a porta de entrada em modo local: escolher
+a função e dizer o nome. O quadro não abre anônimo, porque alteração sem autor não
+serve de registro. A identificação fica salva no navegador e troca pelo botão com a
+assinatura, na barra superior. Com Supabase, quem registra é quem entrou na conta, e
+essa tela não aparece.
+
+Nome já existente volta para o mesmo cadastro, em vez de criar um segundo: dois
+"Pedro Nogueira" na auditoria seriam duas pessoas aos olhos de quem lê. Se a função
+mudou (MR1 virou MR2), o cadastro acompanha.
+
+A sigla curta e o nome por extenso vivem em `FUNCAO_LABEL` e `FUNCAO_DESCRICAO` —
+mesmo arranjo das categorias, e pelo mesmo motivo: "MR1" cabe na linha, "Médico(a)
+residente — 1º ano" explica.
+
 ### Auditoria é somente leitura
 
 Toda alteração grava autor, horário, campo, valor anterior e novo. Nenhuma tela edita
 ou apaga registros de auditoria, e o RLS do Supabase não tem política de update ou
 delete para essa tabela.
+
+A linha é escrita por extenso: **`MR1 Fulano de Tal às 14:32 do dia 22/11/2026`**
+(`assinaturaCompleta`, em `src/lib/calc.ts`).
+
+**A função fica gravada no registro, não é lida do cadastro na hora de exibir.** Quem
+era MR1 em março é MR2 em abril, e a linha de março tem de continuar dizendo MR1 — é a
+diferença entre um histórico e uma lista de nomes. Vale para `auditoria.usuarioFuncao`,
+`controles.responsavelFuncao` e `controles.lancadoPorFuncao`. Registros gravados antes
+das funções fixas aparecem só com o nome; não se atribui cargo retroativo a ninguém.
 
 Quando o responsável de um controle é trocado no popup, a auditoria guarda **as duas
 informações**: quem registrou e de qual conta foi lançado. Trocar o responsável não
@@ -322,13 +352,14 @@ src/
                        CartaoPaciente, MenuLeito,
                        ModalAdmissao, ModalControles, ModalAnamnese,
                        ModalEditarPaciente, ModalEncerrar, ModalExames,
-                       ConfigLeitos, ConfigCategorias
+                       RegistroInicial, ConfigLeitos, ConfigCategorias
                        usePosicaoAncorada — painéis que saem de um botão da linha
 ```
 
-O estado salvo no navegador é versionado (`cpn-controle:estado:v2`), e
-`storage.ts` migra a versão anterior em vez de descartá-la. Ao acrescentar um campo
-obrigatório, acrescente também a migração.
+O estado salvo no navegador é versionado (`cpn-controle:estado:v3`), e `local.ts` migra
+as versões anteriores em vez de descartá-las, da mais recente para a mais antiga (v2 →
+funções fixas; v1 → sessões). Ao acrescentar um campo obrigatório, acrescente também a
+migração.
 
 Regra que não deve ser quebrada: **componente nenhum fala com `localStorage` ou com o
 Supabase diretamente.** Tudo passa pelo repositório.
@@ -356,4 +387,6 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + build
 npm run typecheck
+npm run verificar       # lógica: cálculos, contraste, assinatura, gravação
+npm run verificar:tela  # monta o app num DOM e confere o registro inicial
 ```

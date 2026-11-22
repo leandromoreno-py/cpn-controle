@@ -32,7 +32,7 @@ create table if not exists usuarios (
   id uuid primary key default gen_random_uuid(),
   auth_user_id uuid unique references auth.users (id) on delete set null,
   nome text not null,
-  funcao text not null default 'outra',
+  funcao text not null default 'staff',
   funcao_livre text,
   registro_profissional text,
   email text,
@@ -124,8 +124,10 @@ create table if not exists controles (
   -- As duas informações ficam guardadas quando diferem.
   responsavel_id uuid references usuarios (id),
   responsavel_nome text not null,
+  responsavel_funcao text,
   lancado_por_id uuid references usuarios (id),
   lancado_por_nome text,
+  lancado_por_funcao text,
   pa_sistolica int,
   pa_diastolica int,
   fc int,
@@ -194,6 +196,10 @@ create table if not exists auditoria (
   paciente_id uuid references pacientes (id) on delete set null,
   usuario_id uuid references usuarios (id),
   usuario_nome text not null,
+  -- função no momento do registro, não lida do cadastro na hora de exibir:
+  -- quem era MR1 em março é MR2 em abril, e a linha antiga tem de continuar
+  -- dizendo MR1.
+  usuario_funcao text,
   acao text not null,
   entidade text,
   campo text,
@@ -352,6 +358,28 @@ alter table medicacoes          add column if not exists ultima_dose_em timestam
 alter table medicacoes          add column if not exists doses_administradas timestamptz[] not null default '{}';
 alter table medicacoes          add column if not exists total_doses int;
 alter table medicacoes          add column if not exists observacao text;
+alter table controles           add column if not exists responsavel_funcao text;
+alter table controles           add column if not exists lancado_por_funcao text;
+alter table auditoria           add column if not exists usuario_funcao text;
+
+-- As funções passaram a ser as cinco fixas: MR1, MR2, MR3, Interno e Staff.
+-- Cadastros antigos vão para a equivalente mais próxima e podem ser corrigidos
+-- pela pessoa. Os registros de auditoria já gravados ficam sem função — não se
+-- atribui cargo a quem registrou antes da lista existir.
+alter table usuarios alter column funcao set default 'staff';
+update usuarios set funcao = case funcao
+    when 'residente'          then 'mr1'
+    when 'tecnico'            then 'interno'
+    when 'doula'              then 'interno'
+    when 'mr1' then 'mr1' when 'mr2' then 'mr2' when 'mr3' then 'mr3'
+    when 'interno' then 'interno' when 'staff' then 'staff'
+    else 'staff'
+  end
+  where funcao not in ('mr1', 'mr2', 'mr3', 'interno', 'staff');
+
+alter table usuarios drop constraint if exists usuarios_funcao_check;
+alter table usuarios add constraint usuarios_funcao_check
+  check (funcao in ('mr1', 'mr2', 'mr3', 'interno', 'staff'));
 
 -- O status 'obito' e os desfechos novos entraram depois da primeira versão.
 alter table pacientes drop constraint if exists pacientes_status_check;

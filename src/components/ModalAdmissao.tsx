@@ -99,6 +99,7 @@ export function ModalAdmissao({ onFechar }: { onFechar(): void }) {
             ),
             responsavelId: usuarioAtual.id,
             responsavelNome: usuarioAtual.nome,
+            responsavelFuncao: usuarioAtual.funcao,
             paSistolica: num(pas),
             paDiastolica: num(pad),
             fc: num(fc),

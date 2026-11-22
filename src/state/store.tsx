@@ -15,12 +15,14 @@ import type {
   Desfecho,
   EstadoApp,
   ExameProgramacao,
+  FuncaoUsuario,
   Leito,
   Medicacao,
   Paciente,
   Sessao,
   Usuario,
 } from '../types';
+import { FUNCAO_LABEL } from '../types';
 import { obterRepositorio, supabaseConfigurado, type Backend } from '../services/storage';
 import { ESTADO_VAZIO, persistirDiferencas } from '../services/repositorio';
 import {
@@ -32,7 +34,7 @@ import {
   sessaoAtual as sessaoAuthAtual,
 } from '../services/supabase';
 import { leitosPadrao } from '../services/seed';
-import { agoraIso, novoId } from '../lib/calc';
+import { agoraIso, assinatura, novoId } from '../lib/calc';
 
 export type Tema = 'claro' | 'escuro';
 
@@ -48,6 +50,14 @@ interface Ctx {
   alternarTema(): void;
   usuarioAtual: Usuario;
   definirUsuarioAtual(id: string): void;
+  /**
+   * Registro inicial: a pessoa escolhe a função entre as cinco e diz o nome.
+   * Reaproveita o cadastro quando o nome já existe — dois "MR1 Pedro
+   * Nogueira" na auditoria seriam duas pessoas aos olhos de quem lê.
+   */
+  registrarIdentidade(funcao: FuncaoUsuario, nome: string): void;
+  /** Ninguém se identificou ainda neste navegador (modo local). */
+  precisaRegistro: boolean;
 
   /** Com Supabase ligado e ninguém autenticado, a tela de login assume. */
   precisaLogin: boolean;
@@ -232,11 +242,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       estado?.usuarios[0] ?? {
         id: 'u_desconhecido',
         nome: 'Usuário',
-        funcao: 'outra',
+        funcao: 'staff',
         ativo: true,
       }
     );
   }, [estado, usuarioId, usuarioLogadoId, multiusuario]);
+
+  /** "MR1 Fulano de Tal" — o que vai nos campos de autoria exibidos. */
+  const assinaturaAtual = useMemo(
+    () => assinatura(usuarioAtual.funcao, usuarioAtual.nome),
+    [usuarioAtual]
+  );
 
   useEffect(() => {
     if (!multiusuario || !autenticado || !usuarioAtual.nome) return;
@@ -248,8 +264,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const mutar = useCallback(
     (
       fn: (e: EstadoApp) => EstadoApp,
-      registro?: Omit<Ctx['estado']['auditoria'][number], 'id' | 'timestamp' | 'usuarioNome'> & {
+      registro?: Omit<
+        Ctx['estado']['auditoria'][number],
+        'id' | 'timestamp' | 'usuarioNome' | 'usuarioFuncao'
+      > & {
         usuarioNome?: string;
+        usuarioFuncao?: FuncaoUsuario;
       }
     ) => {
       setEstado((anterior) => {
@@ -265,6 +285,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
               timestamp: agoraIso(),
               usuarioNome: registro.usuarioNome ?? usuarioAtual.nome,
               usuarioId: registro.usuarioId ?? usuarioAtual.id,
+              // Congelada aqui: a linha da auditoria tem de continuar dizendo
+              // o que a pessoa era no dia, não o que é hoje.
+              usuarioFuncao: registro.usuarioFuncao ?? usuarioAtual.funcao,
             },
             ...proximo.auditoria,
           ],
@@ -303,6 +326,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
     definirUsuarioAtual: (id) => {
       setUsuarioId(id);
       localStorage.setItem(CHAVE_USUARIO, id);
+    },
+
+    // Modo local: só precisa de registro inicial quem ainda não se
+    // identificou. Com login, quem registra é quem entrou na conta.
+    precisaRegistro:
+      !multiusuario && estado != null && !estado.usuarios.some((u) => u.id === usuarioId),
+
+    registrarIdentidade: (funcao, nome) => {
+      const limpo = nome.trim().replace(/\s+/g, ' ');
+      if (!limpo) return;
+      const existente = estado?.usuarios.find(
+        (u) => u.nome.toLowerCase() === limpo.toLowerCase()
+      );
+      if (existente) {
+        // Mesma pessoa de volta. Se mudou de ano de residência, o cadastro
+        // acompanha; o que ela já registrou antes continua com a função de
+        // então.
+        if (existente.funcao !== funcao) {
+          mutar(
+            (e) => ({
+              ...e,
+              usuarios: e.usuarios.map((u) => (u.id === existente.id ? { ...u, funcao } : u)),
+            }),
+            {
+              acao: 'registro_inicial',
+              entidade: 'usuario',
+              campo: 'função',
+              valorAnterior: FUNCAO_LABEL[existente.funcao],
+              valorNovo: FUNCAO_LABEL[funcao],
+              usuarioNome: limpo,
+              usuarioFuncao: funcao,
+            }
+          );
+        }
+        setUsuarioId(existente.id);
+        localStorage.setItem(CHAVE_USUARIO, existente.id);
+        return;
+      }
+      const novo: Usuario = { id: novoId('u'), nome: limpo, funcao, ativo: true };
+      mutar((e) => ({ ...e, usuarios: [...e.usuarios, novo] }), {
+        acao: 'registro_inicial',
+        entidade: 'usuario',
+        valorNovo: `${FUNCAO_LABEL[funcao]} ${limpo}`,
+        usuarioNome: limpo,
+        usuarioFuncao: funcao,
+      });
+      setUsuarioId(novo.id);
+      localStorage.setItem(CHAVE_USUARIO, novo.id);
     },
 
     sessaoAtiva,
@@ -394,6 +465,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   horario: controleInicial.horario ?? agora,
                   responsavelNome: controleInicial.responsavelNome ?? usuarioAtual.nome,
                   responsavelId: controleInicial.responsavelId ?? usuarioAtual.id,
+                  responsavelFuncao: controleInicial.responsavelFuncao ?? usuarioAtual.funcao,
                 } as Controle,
               ]
             : e.controles,
@@ -423,7 +495,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   ...p,
                   ...mudancas,
                   atualizadoEm: agoraIso(),
-                  atualizadoPor: usuarioAtual.nome,
+                  atualizadoPor: assinaturaAtual,
                 }
               : p
           ),
@@ -467,7 +539,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   ...p,
                   categoriaId,
                   atualizadoEm: agoraIso(),
-                  atualizadoPor: usuarioAtual.nome,
+                  atualizadoPor: assinaturaAtual,
                 }
               : p
           ),
@@ -499,7 +571,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   ...p,
                   anamnese: texto,
                   atualizadoEm: agoraIso(),
-                  atualizadoPor: usuarioAtual.nome,
+                  atualizadoPor: assinaturaAtual,
                 }
               : p
           ),
@@ -535,7 +607,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     arquivadaEm: agoraIso(),
                     leitoId: null,
                     atualizadoEm: agoraIso(),
-                    atualizadoPor: usuarioAtual.nome,
+                    atualizadoPor: assinaturaAtual,
                   }
                 : p
             ),
@@ -566,7 +638,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   ...p,
                   dinamicaUterina: controle.dinamicaUterina ?? p.dinamicaUterina,
                   atualizadoEm: agoraIso(),
-                  atualizadoPor: usuarioAtual.nome,
+                  atualizadoPor: assinaturaAtual,
                 }
               : p
           ),
@@ -768,11 +840,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   ...x,
                   realizado: marcando,
                   realizadoEm: marcando ? agora : undefined,
-                  realizadoPor: marcando ? usuarioAtual.nome : undefined,
+                  realizadoPor: marcando ? assinaturaAtual : undefined,
                   // A última realização sobrevive ao desmarcar: é o histórico
                   // que interessa num exame que se repete.
                   ultimaRealizacaoEm: marcando ? agora : x.ultimaRealizacaoEm,
-                  ultimaRealizacaoPor: marcando ? usuarioAtual.nome : x.ultimaRealizacaoPor,
+                  ultimaRealizacaoPor: marcando ? assinaturaAtual : x.ultimaRealizacaoPor,
                 }
               : x
           ),

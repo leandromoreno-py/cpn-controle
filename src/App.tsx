@@ -12,10 +12,11 @@ import { ModalEncerrar } from './components/ModalEncerrar';
 import { ModalExames } from './components/ModalExames';
 import { ModalMedicacoes } from './components/ModalMedicacoes';
 import { Login } from './components/Login';
+import { RegistroInicial } from './components/RegistroInicial';
 import { ConfigLeitos } from './components/ConfigLeitos';
 import { ConfigCategorias } from './components/ConfigCategorias';
-import { horaHM, situacaoControle } from './lib/calc';
-import { DESFECHO_LABEL, FUNCAO_LABEL, STATUS_LABEL } from './types';
+import { assinatura, assinaturaCompleta, horaHM, situacaoControle } from './lib/calc';
+import { DESFECHO_LABEL, FUNCAO_DESCRICAO, STATUS_LABEL } from './types';
 
 type Ordem = 'leito' | 'atraso' | 'categoria';
 
@@ -30,7 +31,6 @@ export default function App() {
     tema,
     alternarTema,
     usuarioAtual,
-    definirUsuarioAtual,
     multiusuario,
     sessaoAtiva,
     precisaLogin,
@@ -38,6 +38,7 @@ export default function App() {
     erroGravacao,
     limparErroGravacao,
     presentes,
+    precisaRegistro,
   } = useApp();
 
   const [pagina, setPagina] = useState<Pagina>('quadro');
@@ -57,6 +58,7 @@ export default function App() {
     () => window.innerWidth >= LARGURA_MINIMA_QUADRO
   );
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
+  const [trocaAberta, setTrocaAberta] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(CHAVE_VISTA, compacto ? 'celular' : 'quadro');
@@ -87,6 +89,10 @@ export default function App() {
   if (!pronto) {
     return <p style={{ padding: 32 }}>Carregando o quadro…</p>;
   }
+
+  // Ninguém se identificou neste navegador: o quadro não abre anônimo, porque
+  // alteração sem autor não serve de registro.
+  if (precisaRegistro) return <RegistroInicial />;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexWrap: 'wrap', alignItems: 'stretch' }}>
@@ -256,22 +262,15 @@ export default function App() {
                         Sair ({usuarioAtual.nome})
                       </button>
                     ) : (
-                      <div className="field" style={{ flex: '1 1 150px', height: 40 }}>
-                        <label className="sr-only" htmlFor="usuario-c">
-                          Usuário desta sessão
-                        </label>
-                        <select
-                          id="usuario-c"
-                          value={usuarioAtual.id}
-                          onChange={(e) => definirUsuarioAtual(e.target.value)}
-                        >
-                          {estado.usuarios.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.nome}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ flex: '1 1 150px', height: 40 }}
+                        onClick={() => setTrocaAberta(true)}
+                        title="Trocar quem está registrando"
+                      >
+                        {assinatura(usuarioAtual.funcao, usuarioAtual.nome)}
+                      </button>
                     )}
                     <button
                       type="button"
@@ -468,22 +467,23 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              <div className="field" style={{ width: 190 }}>
-                <label className="sr-only" htmlFor="usuario">
-                  Usuário desta sessão
-                </label>
-                <select
-                  id="usuario"
-                  value={usuarioAtual.id}
-                  onChange={(e) => definirUsuarioAtual(e.target.value)}
+              <button
+                type="button"
+                className="btn"
+                style={{ height: 36, maxWidth: 230 }}
+                onClick={() => setTrocaAberta(true)}
+                title={`${FUNCAO_DESCRICAO[usuarioAtual.funcao]} — trocar quem está registrando`}
+              >
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
                 >
-                  {estado.usuarios.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.nome} · {FUNCAO_LABEL[u.funcao]}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  {assinatura(usuarioAtual.funcao, usuarioAtual.nome)}
+                </span>
+              </button>
             )}
             <button
               type="button"
@@ -623,6 +623,7 @@ export default function App() {
       {medicacaoDe && (
         <ModalMedicacoes paciente={medicacaoDe} onFechar={() => setMedicacaoDe(null)} />
       )}
+      {trocaAberta && <RegistroInicial onFechar={() => setTrocaAberta(false)} />}
     </div>
   );
 }
@@ -804,15 +805,20 @@ function PaginaAuditoria() {
                 {iniciais(a.usuarioNome)}
               </span>
               <span style={{ flex: '1 1 auto', minWidth: 0 }}>
-                <strong>{a.usuarioNome}</strong> — {a.acao.replace(/_/g, ' ')}
+                <strong>
+                  {assinaturaCompleta(a.usuarioFuncao, a.usuarioNome, a.timestamp)}
+                </strong>
+                <br />
+                {a.acao.replace(/_/g, ' ')}
                 {paciente ? ` · ${paciente.nome}` : ''}
                 {a.campo ? ` · ${a.campo}` : ''}
-                {a.valorAnterior || a.valorNovo
-                  ? ` · de “${a.valorAnterior ?? '—'}” para “${a.valorNovo ?? '—'}”`
-                  : ''}
-              </span>
-              <span style={{ flex: '0 0 auto', color: 'var(--text-dim)' }}>
-                {horaHM(a.timestamp)}
+                {a.valorAnterior && a.valorNovo
+                  ? ` · de “${a.valorAnterior}” para “${a.valorNovo}”`
+                  : a.valorNovo
+                    ? ` · ${a.valorNovo}`
+                    : a.valorAnterior
+                      ? ` · era “${a.valorAnterior}”`
+                      : ''}
               </span>
             </div>
           );

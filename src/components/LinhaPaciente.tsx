@@ -8,6 +8,7 @@ import { estiloPainel, usePosicaoAncorada } from './usePosicaoAncorada';
 import { estiloCategoria } from '../lib/contrast';
 import {
   alertasClinicos,
+  assinatura,
   calcularBalanco,
   controlesDe,
   debitoUrinario,
@@ -251,7 +252,16 @@ export function LinhaPaciente({
           </span>
           <div style={{ color: 'var(--text-dim)', fontSize: 10.5, marginTop: 3 }}>
             meta {formatarIntervalo(paciente.intervaloControleMin)}
-            {ultimo ? ` · ${ultimo.responsavelNome.split(' ')[0]}` : ''}
+            {ultimo ? (
+              <span
+                title={assinatura(ultimo.responsavelFuncao, ultimo.responsavelNome)}
+              >{` · ${assinatura(
+                ultimo.responsavelFuncao,
+                ultimo.responsavelNome.split(' ')[0]
+              )}`}</span>
+            ) : (
+              ''
+            )}
           </div>
         </div>
 

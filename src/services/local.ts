@@ -1,8 +1,10 @@
+import { normalizarFuncao } from '../types';
 import type { EstadoApp } from '../types';
 import type { Repositorio } from './repositorio';
 import { CATEGORIAS_PADRAO, SESSAO_PADRAO, estadoInicial } from './seed';
 
-const CHAVE = 'cpn-controle:estado:v2';
+const CHAVE = 'cpn-controle:estado:v3';
+const CHAVE_V2 = 'cpn-controle:estado:v2';
 const CHAVE_V1 = 'cpn-controle:estado:v1';
 
 /**
@@ -26,6 +28,23 @@ function migrarV1(bruto: string): EstadoApp | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * v3: as funções passaram a ser as cinco fixas (MR1–MR3, Interno, Staff).
+ * Quem tinha usuários cadastrados com as funções antigas mantém o cadastro —
+ * a função é convertida para a equivalente mais próxima, e a pessoa pode
+ * corrigir. Os registros de auditoria antigos ficam sem função, e por isso
+ * aparecem só com o nome: inventar um cargo retroativo seria pior.
+ */
+export function migrarFuncoes(estado: EstadoApp): EstadoApp {
+  return {
+    ...estado,
+    usuarios: (estado.usuarios ?? []).map(({ funcao, ...u }) => ({
+      ...u,
+      funcao: normalizarFuncao(funcao),
+    })),
+  };
 }
 
 /**
@@ -64,11 +83,23 @@ export class RepositorioLocal implements Repositorio {
         this.estado = completarCategorias(estado);
         return this.estado;
       }
+      // Versões anteriores, da mais recente para a mais antiga. Nada é
+      // descartado: cada migração acrescenta o que faltava.
+      const v2 = localStorage.getItem(CHAVE_V2);
+      if (v2) {
+        const migrado = migrarFuncoes(JSON.parse(v2) as EstadoApp);
+        if (migrado?.pacientes) {
+          if (!migrado.sessoes?.length) migrado.sessoes = [SESSAO_PADRAO];
+          this.estado = completarCategorias(migrado);
+          this.salvarTudo(this.estado);
+          return this.estado;
+        }
+      }
       const antigo = localStorage.getItem(CHAVE_V1);
       if (antigo) {
         const migrado = migrarV1(antigo);
         if (migrado) {
-          this.estado = completarCategorias(migrado);
+          this.estado = completarCategorias(migrarFuncoes(migrado));
           this.salvarTudo(this.estado);
           return this.estado;
         }

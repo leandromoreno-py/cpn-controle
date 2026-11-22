@@ -108,8 +108,10 @@ export interface Controle {
   horario: string; // ISO — editável pela pessoa que registra
   responsavelId?: string;
   responsavelNome: string; // nome exibido na auditoria
+  responsavelFuncao?: FuncaoUsuario; // função no momento do registro
   lancadoPorId?: string; // conta que lançou, quando difere do responsável
   lancadoPorNome?: string;
+  lancadoPorFuncao?: FuncaoUsuario;
   paSistolica?: number;
   paDiastolica?: number;
   fc?: number;
@@ -206,13 +208,22 @@ export type AcaoAuditoria =
   | 'anamnese'
   | 'obito'
   | 'liberacao_leito'
-  | 'alteracao_sessao';
+  | 'alteracao_sessao'
+  | 'registro_inicial';
 
 export interface RegistroAuditoria {
   id: string;
   pacienteId?: string;
   usuarioId?: string;
   usuarioNome: string;
+  /**
+   * Função de quem registrou, no momento do registro. Fica gravada aqui, e não
+   * lida do cadastro na hora de exibir, porque a pessoa muda de função com o
+   * tempo (MR1 vira MR2) e a auditoria tem de continuar dizendo o que era
+   * verdade naquele plantão. Ausente nos registros gravados antes das funções
+   * fixas.
+   */
+  usuarioFuncao?: FuncaoUsuario;
   acao: AcaoAuditoria;
   entidade?: string;
   campo?: string;
@@ -221,21 +232,20 @@ export interface RegistroAuditoria {
   timestamp: string;
 }
 
-export type FuncaoUsuario =
-  | 'enfermeiro_obstetra'
-  | 'medico'
-  | 'residente'
-  | 'tecnico'
-  | 'obstetriz'
-  | 'doula'
-  | 'admin'
-  | 'outra';
+/**
+ * Cinco funções fixas, escolhidas no registro inicial. A lista é fechada de
+ * propósito: é ela que aparece na assinatura de cada alteração, e sigla curta
+ * com significado combinado vale mais que texto livre num plantão.
+ */
+export type FuncaoUsuario = 'mr1' | 'mr2' | 'mr3' | 'interno' | 'staff';
+
+/** Ordem de exibição — da formação mais recente à mais antiga. */
+export const FUNCOES: FuncaoUsuario[] = ['mr1', 'mr2', 'mr3', 'interno', 'staff'];
 
 export interface Usuario {
   id: string;
   nome: string;
   funcao: FuncaoUsuario;
-  funcaoLivre?: string;
   registroProfissional?: string;
   email?: string;
   ativo: boolean;
@@ -260,16 +270,46 @@ export interface EstadoApp {
   config: Config;
 }
 
+/** Sigla curta — é o que entra na assinatura e nos chips. */
 export const FUNCAO_LABEL: Record<FuncaoUsuario, string> = {
-  enfermeiro_obstetra: 'Enf.ª obstetra',
-  medico: 'Médico(a)',
-  residente: 'Residente',
-  tecnico: 'Técnico(a) de enfermagem',
-  obstetriz: 'Obstetriz',
-  doula: 'Doula',
-  admin: 'Administrador(a)',
-  outra: 'Outra',
+  mr1: 'MR1',
+  mr2: 'MR2',
+  mr3: 'MR3',
+  interno: 'Interno',
+  staff: 'Staff',
 };
+
+/** Por extenso — título, confirmação e tela de registro inicial. */
+export const FUNCAO_DESCRICAO: Record<FuncaoUsuario, string> = {
+  mr1: 'Médico(a) residente — 1º ano',
+  mr2: 'Médico(a) residente — 2º ano',
+  mr3: 'Médico(a) residente — 3º ano',
+  interno: 'Interno(a) de medicina',
+  staff: 'Staff — médico(a) do serviço',
+};
+
+/**
+ * Funções antigas, de antes da lista fixa. Ficam aqui só para o estado salvo
+ * no navegador e os cadastros já criados não perderem a referência. Não
+ * aparecem para escolher.
+ */
+export const FUNCAO_LEGADA: Record<string, FuncaoUsuario> = {
+  residente: 'mr1',
+  medico: 'staff',
+  admin: 'staff',
+  enfermeiro_obstetra: 'staff',
+  obstetriz: 'staff',
+  tecnico: 'interno',
+  doula: 'interno',
+  outra: 'staff',
+};
+
+/** Normaliza qualquer valor vindo do disco ou do banco para a lista fixa. */
+export function normalizarFuncao(bruto: unknown): FuncaoUsuario {
+  const v = String(bruto ?? '');
+  if ((FUNCOES as string[]).includes(v)) return v as FuncaoUsuario;
+  return FUNCAO_LEGADA[v] ?? 'staff';
+}
 
 export const DESFECHO_LABEL: Record<TipoDesfecho, string> = {
   parto_normal: 'Parto normal',

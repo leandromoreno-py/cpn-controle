@@ -2,8 +2,11 @@ import {
   idadeGestacional, paridade, situacaoControle, debitoUrinario,
   diureseAnterior, calcularBalanco, alertasClinicos, duracao, isoComHora,
   serieDoses, recortarSerie, horaHM,
+  assinatura, dataHoraPorExtenso, assinaturaCompleta,
 } from '../src/lib/calc';
-import type { Medicacao } from '../src/types';
+import type { EstadoApp, Medicacao } from '../src/types';
+import { FUNCOES, normalizarFuncao } from '../src/types';
+import { migrarFuncoes } from '../src/services/local';
 import { estiloCategoria, contrastRatio, hexToRgb, mistura } from '../src/lib/contrast';
 import { estadoInicial } from '../src/services/seed';
 import { diferenca, persistirDiferencas } from '../src/services/repositorio';
@@ -207,6 +210,53 @@ const repoFalso = {
   salvarUsuario: async () => { chamadas.push('usuario'); },
   registrarAuditoria: async () => { chamadas.push('auditoria'); },
 };
+
+// --- assinatura: função + nome + quando
+const quando = new Date(2026, 10, 22, 14, 32).toISOString(); // 22/11/2026 14:32
+ok('assinatura junta sigla e nome',
+  assinatura('mr1', 'Fulano de Tal') === 'MR1 Fulano de Tal',
+  assinatura('mr1', 'Fulano de Tal'));
+ok('assinatura sem função não inventa sigla',
+  assinatura(undefined, 'Fulano de Tal') === 'Fulano de Tal',
+  assinatura(undefined, 'Fulano de Tal'));
+ok('data e hora por extenso',
+  dataHoraPorExtenso(quando) === 'às 14:32 do dia 22/11/2026',
+  dataHoraPorExtenso(quando));
+ok('linha completa da auditoria',
+  assinaturaCompleta('mr1', 'Fulano de Tal', quando)
+    === 'MR1 Fulano de Tal às 14:32 do dia 22/11/2026',
+  assinaturaCompleta('mr1', 'Fulano de Tal', quando));
+ok('as cinco funções têm sigla',
+  FUNCOES.length === 5 && FUNCOES.every((f) => assinatura(f, 'X').split(' ')[0].length > 0),
+  FUNCOES.map((f) => assinatura(f, 'X')).join(' | '));
+ok('staff também assina',
+  assinaturaCompleta('staff', 'Rita Mendes', quando)
+    === 'Staff Rita Mendes às 14:32 do dia 22/11/2026');
+
+// --- migração das funções antigas
+ok('residente vira MR1', normalizarFuncao('residente') === 'mr1');
+ok('médico vira Staff', normalizarFuncao('medico') === 'staff');
+ok('função desconhecida vira Staff', normalizarFuncao('xpto') === 'staff');
+ok('função nova passa intacta', normalizarFuncao('mr2') === 'mr2');
+const antigo = {
+  ...e,
+  usuarios: [
+    { id: 'u1', nome: 'Ana', funcao: 'enfermeiro_obstetra', funcaoLivre: 'Enfermeira', ativo: true },
+    { id: 'u2', nome: 'Pedro', funcao: 'residente', ativo: true },
+  ],
+} as unknown as EstadoApp;
+const migrado = migrarFuncoes(antigo);
+ok('migração mantém os cadastros',
+  migrado.usuarios.length === 2 && migrado.usuarios[0].nome === 'Ana');
+ok('migração converte as funções',
+  migrado.usuarios.every((u) => (FUNCOES as string[]).includes(u.funcao)),
+  migrado.usuarios.map((u) => u.funcao).join(','));
+ok('migração não perde pacientes', migrado.pacientes.length === e.pacientes.length);
+ok('todo usuário do seed tem função válida',
+  e.usuarios.every((u) => (FUNCOES as string[]).includes(u.funcao)),
+  e.usuarios.map((u) => assinatura(u.funcao, u.nome)).join(' | '));
+ok('controles do seed trazem a função do responsável',
+  e.controles.every((c) => !c.responsavelId || c.responsavelFuncao != null));
 
 async function testarPersistencia() {
   await persistirDiferencas(repoFalso, estadoA, estadoB);

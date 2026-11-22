@@ -48,6 +48,15 @@ Não existe autocadastro no app: quem tem acesso ao quadro é decisão da unidad
 primeira entrada, o app cria sozinho o registro em `usuarios` com o nome derivado do
 e-mail — depois dá para corrigir nome, função e registro profissional direto na tabela.
 
+A coluna `funcao` aceita só `mr1`, `mr2`, `mr3`, `interno` e `staff`, e entra como
+`staff` por padrão. É dessa coluna que sai a sigla da assinatura ("MR1 Fulano de Tal"),
+então vale corrigir antes da pessoa começar a registrar. Dá para já deixar pronto no
+*Add user*, em **User Metadata**:
+
+```json
+{ "nome": "Fulano de Tal", "funcao": "mr1" }
+```
+
 Para alguém poder mexer em leitos, categorias e listas, marque `admin = true` na linha
 dessa pessoa em `usuarios`.
 

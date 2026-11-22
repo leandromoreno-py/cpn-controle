@@ -11,6 +11,7 @@ import type {
   Sessao,
   Usuario,
 } from '../types';
+import { normalizarFuncao } from '../types';
 import type { Repositorio } from './repositorio';
 import { COMORBIDADES_PADRAO } from './seed';
 
@@ -155,8 +156,10 @@ function controleDe(r: Linha): Controle {
     horario: paraData(r.horario) ?? new Date().toISOString(),
     responsavelId: (r.responsavel_id as string) ?? undefined,
     responsavelNome: r.responsavel_nome as string,
+    responsavelFuncao: r.responsavel_funcao ? normalizarFuncao(r.responsavel_funcao) : undefined,
     lancadoPorId: (r.lancado_por_id as string) ?? undefined,
     lancadoPorNome: (r.lancado_por_nome as string) ?? undefined,
+    lancadoPorFuncao: r.lancado_por_funcao ? normalizarFuncao(r.lancado_por_funcao) : undefined,
     paSistolica: (r.pa_sistolica as number) ?? undefined,
     paDiastolica: (r.pa_diastolica as number) ?? undefined,
     fc: (r.fc as number) ?? undefined,
@@ -176,8 +179,10 @@ const controlePara = (c: Controle): Linha => ({
   horario: c.horario,
   responsavel_id: c.responsavelId ?? null,
   responsavel_nome: c.responsavelNome,
+  responsavel_funcao: c.responsavelFuncao ?? null,
   lancado_por_id: c.lancadoPorId ?? null,
   lancado_por_nome: c.lancadoPorNome ?? null,
+  lancado_por_funcao: c.lancadoPorFuncao ?? null,
   pa_sistolica: c.paSistolica ?? null,
   pa_diastolica: c.paDiastolica ?? null,
   fc: c.fc ?? null,
@@ -257,8 +262,7 @@ function usuarioDe(r: Linha): Usuario {
   return {
     id: r.id as string,
     nome: r.nome as string,
-    funcao: r.funcao as Usuario['funcao'],
-    funcaoLivre: (r.funcao_livre as string) ?? undefined,
+    funcao: normalizarFuncao(r.funcao),
     registroProfissional: (r.registro_profissional as string) ?? undefined,
     email: (r.email as string) ?? undefined,
     ativo: Boolean(r.ativo),
@@ -268,7 +272,6 @@ const usuarioPara = (u: Usuario): Linha => ({
   id: u.id,
   nome: u.nome,
   funcao: u.funcao,
-  funcao_livre: u.funcaoLivre ?? null,
   registro_profissional: u.registroProfissional ?? null,
   email: u.email ?? null,
   ativo: u.ativo,
@@ -280,6 +283,7 @@ function auditoriaDe(r: Linha): RegistroAuditoria {
     pacienteId: (r.paciente_id as string) ?? undefined,
     usuarioId: (r.usuario_id as string) ?? undefined,
     usuarioNome: r.usuario_nome as string,
+    usuarioFuncao: r.usuario_funcao ? normalizarFuncao(r.usuario_funcao) : undefined,
     acao: r.acao as RegistroAuditoria['acao'],
     entidade: (r.entidade as string) ?? undefined,
     campo: (r.campo as string) ?? undefined,
@@ -293,6 +297,7 @@ const auditoriaPara = (a: RegistroAuditoria): Linha => ({
   paciente_id: a.pacienteId ?? null,
   usuario_id: a.usuarioId ?? null,
   usuario_nome: a.usuarioNome,
+  usuario_funcao: a.usuarioFuncao ?? null,
   acao: a.acao,
   entidade: a.entidade ?? null,
   campo: a.campo ?? null,
@@ -458,7 +463,7 @@ export async function garantirUsuario(sessao: Session): Promise<Usuario | null> 
   const novo = {
     auth_user_id: sessao.user.id,
     nome: (sessao.user.user_metadata?.nome as string) ?? email.split('@')[0],
-    funcao: (sessao.user.user_metadata?.funcao as string) ?? 'outra',
+    funcao: normalizarFuncao(sessao.user.user_metadata?.funcao),
     email,
     ativo: true,
   };

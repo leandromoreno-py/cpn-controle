@@ -7,13 +7,21 @@ import type {
   ToqueVaginal,
   Usuario,
 } from '../types';
-import { COR_LIQUIDO_LABEL, FUNCAO_LABEL, type CorLiquido, type FuncaoUsuario } from '../types';
+import {
+  COR_LIQUIDO_LABEL,
+  FUNCAO_DESCRICAO,
+  FUNCAO_LABEL,
+  FUNCOES,
+  type CorLiquido,
+  type FuncaoUsuario,
+} from '../types';
 import { useApp } from '../state/store';
 import { Aviso, Campo, Modal, Secao, SecaoOpcional, Unidade } from './ui';
 import { iniciais } from './Sidebar';
 import {
   agoraIso,
   alertasClinicos,
+  assinatura,
   calcularBalanco,
   debitoUrinario,
   diureseAnterior,
@@ -125,8 +133,10 @@ export function ModalControles({
       horario: horarioIso,
       responsavelId: responsavel.id,
       responsavelNome: responsavel.nome,
+      responsavelFuncao: responsavel.funcao,
       lancadoPorId: responsavel.id === usuarioAtual.id ? undefined : usuarioAtual.id,
       lancadoPorNome: responsavel.id === usuarioAtual.id ? undefined : usuarioAtual.nome,
+      lancadoPorFuncao: responsavel.id === usuarioAtual.id ? undefined : usuarioAtual.funcao,
       ...parcial,
       dinamicaUterina: du,
       balanco,
@@ -275,9 +285,11 @@ export function ModalControles({
                   whiteSpace: 'nowrap',
                 }}
               >
-                <strong style={{ fontWeight: 600 }}>{responsavel.nome}</strong>{' '}
+                <strong style={{ fontWeight: 600 }}>
+                  {assinatura(responsavel.funcao, responsavel.nome)}
+                </strong>{' '}
                 <span style={{ color: 'var(--text-dim)', fontSize: 11.5 }}>
-                  · {responsavel.funcaoLivre ?? FUNCAO_LABEL[responsavel.funcao]}
+                  · {FUNCAO_DESCRICAO[responsavel.funcao]}
                 </span>
               </span>
               <button
@@ -313,7 +325,10 @@ export function ModalControles({
             }}
           >
             {situacao.ultimo
-              ? `Último registro às ${horaHM(situacao.ultimo.horario)} por ${situacao.ultimo.responsavelNome}`
+              ? `Último registro às ${horaHM(situacao.ultimo.horario)} por ${assinatura(
+                  situacao.ultimo.responsavelFuncao,
+                  situacao.ultimo.responsavelNome
+                )}`
               : 'Primeiro registro desta paciente'}
             <br />
             Meta de controles: <strong style={{ color: 'var(--text)' }}>
@@ -590,7 +605,7 @@ function ModalResponsavel({
   const [selecionado, setSelecionado] = useState(atual.id);
   const [adicionando, setAdicionando] = useState(false);
   const [nome, setNome] = useState('');
-  const [funcao, setFuncao] = useState<FuncaoUsuario>('tecnico');
+  const [funcao, setFuncao] = useState<FuncaoUsuario>('mr1');
   const [registro, setRegistro] = useState('');
   const [salvarCadastro, setSalvarCadastro] = useState(false);
 
@@ -698,9 +713,11 @@ function ModalResponsavel({
                   {iniciais(u.nome)}
                 </span>
                 <span style={{ flex: '1 1 auto', minWidth: 0 }}>
-                  <span style={{ display: 'block', fontWeight: 600, fontSize: 13 }}>{u.nome}</span>
+                  <span style={{ display: 'block', fontWeight: 600, fontSize: 13 }}>
+                    {assinatura(u.funcao, u.nome)}
+                  </span>
                   <span style={{ display: 'block', color: 'var(--text-dim)', fontSize: 11.5 }}>
-                    {u.funcaoLivre ?? FUNCAO_LABEL[u.funcao]}
+                    {FUNCAO_DESCRICAO[u.funcao]}
                     {u.registroProfissional ? ` · ${u.registroProfissional}` : ''}
                   </span>
                 </span>
@@ -724,15 +741,15 @@ function ModalResponsavel({
         </Campo>
         <Campo label="Função">
           <select value={funcao} onChange={(e) => setFuncao(e.target.value as FuncaoUsuario)} aria-label="Função">
-            {(Object.keys(FUNCAO_LABEL) as FuncaoUsuario[]).map((f) => (
+            {FUNCOES.map((f) => (
               <option key={f} value={f}>
-                {FUNCAO_LABEL[f]}
+                {FUNCAO_LABEL[f]} — {FUNCAO_DESCRICAO[f]}
               </option>
             ))}
           </select>
         </Campo>
         <Campo label="Registro profissional">
-          <input value={registro} onChange={(e) => setRegistro(e.target.value)} placeholder="COREN / CRM — opcional" aria-label="Registro profissional" />
+          <input value={registro} onChange={(e) => setRegistro(e.target.value)} placeholder="CRM — opcional" aria-label="Registro profissional" />
         </Campo>
         <div style={{ gridColumn: 'span 2' }}>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer' }}>
