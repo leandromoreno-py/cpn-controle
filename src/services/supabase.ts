@@ -459,10 +459,13 @@ function traduzirErroAuth(mensagem: string): string {
  * Exige "Allow anonymous sign-ins" ligado nas configurações de autenticação do
  * projeto. Desligado, o erro é claro e o app cai na entrada por conta.
  */
-export async function entrarAnonimo(): Promise<void> {
+export async function entrarAnonimo(): Promise<Session | null> {
   const db = obterCliente();
-  const { error } = await db.auth.signInAnonymously();
+  const { data, error } = await db.auth.signInAnonymously();
   if (error) throw new Error(traduzirErroAuth(error.message));
+  // Devolve a sessão em vez de esperar o evento: o app não pode depender de
+  // um aviso assíncrono para saber que já entrou.
+  return data.session ?? null;
 }
 
 /**

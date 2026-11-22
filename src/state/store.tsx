@@ -151,6 +151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [presentes, setPresentes] = useState<string[]>([]);
   const [erroEntrada, setErroEntrada] = useState<string | null>(null);
   const [identificacaoConferida, setIdentificacaoConferida] = useState(!multiusuario);
+  const entrandoAnonimo = useRef(false);
 
   // Autenticação, só quando há Supabase configurado.
   //
@@ -163,24 +164,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!multiusuario) return;
     let vivo = true;
+    // Enquanto a entrada anônima está em curso, nenhuma tela de senha pode
+    // aparecer. O Supabase avisa "sessão: nenhuma" assim que o ouvinte é
+    // registrado, antes da entrada terminar — e era esse aviso que fazia a
+    // tela de login piscar e convidar a pessoa a digitar e-mail e senha que
+    // ela não tem.
+    entrandoAnonimo.current = true;
     void sessaoAuthAtual().then(async (s) => {
       if (!vivo) return;
       if (s) {
+        entrandoAnonimo.current = false;
         setSessaoAuth(s);
         setConferindoAuth(false);
         return;
       }
       try {
-        await entrarAnonimo();
-        // a sessão chega pelo aoMudarSessao, abaixo
+        const nova = await entrarAnonimo();
+        if (vivo && nova) setSessaoAuth(nova);
       } catch (erro) {
-        if (!vivo) return;
-        setErroEntrada((erro as Error).message);
-        setConferindoAuth(false);
+        if (vivo) setErroEntrada((erro as Error).message);
+      } finally {
+        entrandoAnonimo.current = false;
+        if (vivo) setConferindoAuth(false);
       }
     });
     return aoMudarSessao((s) => {
-      setSessaoAuth(s);
+      if (s) {
+        entrandoAnonimo.current = false;
+        setSessaoAuth(s);
+        setConferindoAuth(false);
+        return;
+      }
+      // "sem sessão" só vale depois que a tentativa anônima acabou; durante
+      // ela, é só o estado inicial do próprio Supabase.
+      if (entrandoAnonimo.current) return;
+      setSessaoAuth(null);
       setConferindoAuth(false);
     });
   }, [multiusuario]);

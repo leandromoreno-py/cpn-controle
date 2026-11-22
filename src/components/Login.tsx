@@ -14,7 +14,7 @@ export function Login() {
   const { entrar, erroEntrada } = useApp();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
-  const [erro, setErro] = useState<string | null>(erroEntrada);
+  const [erro, setErro] = useState<string | null>(null);
   const [entrando, setEntrando] = useState(false);
 
   const enviar = async (e: FormEvent) => {
@@ -114,7 +114,7 @@ export function Login() {
           </div>
         </div>
 
-        {erro && (
+        {(erro ?? erroEntrada) && (
           <div
             role="alert"
             style={{
@@ -127,7 +127,7 @@ export function Login() {
               fontSize: 12.5,
             }}
           >
-            {erro}
+            {erro ?? erroEntrada}
           </div>
         )}
 
