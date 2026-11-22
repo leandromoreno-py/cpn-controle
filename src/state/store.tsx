@@ -70,6 +70,7 @@ interface Ctx {
   adicionarMedicacao(med: Omit<Medicacao, 'id'>): void;
   atualizarMedicacao(id: string, mudancas: Partial<Medicacao>, campo?: string): void;
   registrarDose(med: Medicacao): void;
+  desfazerUltimaDose(med: Medicacao): void;
   removerMedicacao(med: Medicacao): void;
 
   adicionarUsuario(u: Omit<Usuario, 'id'>): Usuario;
@@ -796,9 +797,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     },
 
-    /** Dose administrada agora: recalcula a próxima pelo intervalo. */
+    /** Dose administrada agora: entra na série e recalcula a próxima. */
     registrarDose: (med) => {
       const agora = new Date();
+      const iso = agora.toISOString();
+      const anteriores = med.dosesAdministradas?.length
+        ? med.dosesAdministradas
+        : med.ultimaDoseEm
+          ? [med.ultimaDoseEm]
+          : [];
+      const doses = [...anteriores, iso];
       const proxima = med.intervaloMin
         ? new Date(agora.getTime() + med.intervaloMin * 60_000).toISOString()
         : undefined;
@@ -807,14 +815,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...e,
           medicacoes: e.medicacoes.map((m) =>
             m.id === med.id
-              ? { ...m, ultimaDoseEm: agora.toISOString(), proximaDose: proxima }
+              ? {
+                  ...m,
+                  dosesAdministradas: doses,
+                  ultimaDoseEm: iso,
+                  proximaDose: proxima,
+                  // Esquema com número fechado de doses encerra sozinho.
+                  status:
+                    m.totalDoses != null && doses.length >= m.totalDoses
+                      ? ('concluida' as const)
+                      : m.status,
+                }
               : m
           ),
         }),
         auditar('medicacao', {
           pacienteId: med.pacienteId,
-          campo: 'dose administrada',
+          campo: `${doses.length}ª dose administrada`,
           valorNovo: med.nome,
+        })
+      );
+    },
+
+    /** Desfaz a última dose registrada — para o clique errado no plantão. */
+    desfazerUltimaDose: (med) => {
+      const anteriores = med.dosesAdministradas?.length
+        ? med.dosesAdministradas
+        : med.ultimaDoseEm
+          ? [med.ultimaDoseEm]
+          : [];
+      if (anteriores.length === 0) return;
+      const doses = anteriores.slice(0, -1);
+      const ultima = doses[doses.length - 1];
+      mutar(
+        (e) => ({
+          ...e,
+          medicacoes: e.medicacoes.map((m) =>
+            m.id === med.id
+              ? {
+                  ...m,
+                  dosesAdministradas: doses,
+                  ultimaDoseEm: ultima,
+                  proximaDose:
+                    m.intervaloMin && ultima
+                      ? new Date(
+                          new Date(ultima).getTime() + m.intervaloMin * 60_000
+                        ).toISOString()
+                      : m.intervaloMin
+                        ? m.inicio
+                        : undefined,
+                  status: m.status === 'concluida' ? ('em_curso' as const) : m.status,
+                }
+              : m
+          ),
+        }),
+        auditar('medicacao', {
+          pacienteId: med.pacienteId,
+          campo: 'dose desfeita',
+          valorAnterior: med.nome,
         })
       );
     },

@@ -133,7 +133,11 @@ export interface Medicacao {
   inicio?: string; // ISO
   intervaloMin?: number;
   proximaDose?: string; // ISO — calculada
-  ultimaDoseEm?: string; // ISO
+  ultimaDoseEm?: string; // ISO — mantido por compatibilidade
+  /** Horários das doses efetivamente administradas, em ordem. */
+  dosesAdministradas?: string[];
+  /** Quantas doses o esquema prevê ao todo (ex.: betametasona, 2). */
+  totalDoses?: number;
   observacao?: string;
   status: 'em_curso' | 'suspensa' | 'concluida';
 }

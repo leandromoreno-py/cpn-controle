@@ -221,6 +221,31 @@ concluir e remover.
 Atalhos para o que se usa no centro: ocitocina, sulfato de magnésio (com a observação
 das checagens), ampicilina, dipirona, betametasona e misoprostol.
 
+### Trilha de doses
+
+Medicação com intervalo mostra a **sequência numerada de doses** no quadro, no cartão
+e na tela de medicações: `1ª 08:30 ✓` · `2ª 12:30 ✓` · `3ª 16:30 →` · `4ª 20:30`.
+
+- **✓ verde** — dose administrada, com o horário REAL em que foi dada.
+- **→ âmbar** — a próxima prevista.
+- **⚠ laranja** — a próxima já passou da hora.
+- Cinza discreto — doses futuras.
+
+Cada estado tem cor **e** símbolo. Num posto de enfermagem a cor sozinha não pode
+distinguir dose dada de dose pendente.
+
+**As doses seguintes são projetadas a partir da última dose dada, não do horário de
+início.** Se uma dose atrasa, o esquema inteiro anda junto — é assim que funciona na
+prática. `serieDoses` e `recortarSerie` ficam em `src/lib/calc.ts`, cobertos por
+testes; `TrilhaDoses` desenha.
+
+No quadro a trilha é recortada para caber (até 4 chips, com `+N` indicando as
+anteriores); na tela de medicações aparece inteira.
+
+`totalDoses` fecha o esquema (betametasona, 2 doses): ao registrar a última, a
+medicação se conclui sozinha. **Desfazer** devolve a última dose registrada, para o
+clique errado no meio do plantão.
+
 Medicação com próxima dose vencida continua aparecendo em laranja no chip da linha.
 
 ### Arquivamento preserva tudo

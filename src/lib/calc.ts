@@ -1,7 +1,7 @@
 // Valores derivados. Nada aqui é digitado pelo usuário: idade gestacional,
 // tempo desde o último controle, débito urinário e balanço são sempre calculados.
 
-import type { BalancoHidrico, Controle, Paciente } from '../types';
+import type { BalancoHidrico, Controle, Medicacao, Paciente } from '../types';
 
 export const MS_HORA = 3_600_000;
 
@@ -249,4 +249,83 @@ export function novoId(prefixo = 'id'): string {
   return `${prefixo}_${Date.now().toString(36)}${Math.random()
     .toString(36)
     .slice(2, 8)}`;
+}
+
+
+// ---------------------------------------------------------------- doses
+
+export interface Dose {
+  /** 1ª, 2ª, 3ª… */
+  ordinal: number;
+  horario: string; // ISO
+  feita: boolean;
+  /** A primeira dose ainda não administrada. */
+  proxima: boolean;
+  /** Próxima dose cujo horário já passou. */
+  atrasada: boolean;
+}
+
+/**
+ * A série de doses de uma medicação com intervalo.
+ *
+ * As doses já administradas aparecem com o horário REAL em que foram dadas; as
+ * seguintes são projetadas a partir da última dose + intervalo, não do horário
+ * de início. Se uma dose atrasa, as próximas andam junto — é assim que o
+ * esquema funciona de verdade no plantão.
+ */
+export function serieDoses(
+  med: Medicacao,
+  agora = Date.now(),
+  futurasVisiveis = 2
+): Dose[] {
+  if (!med.intervaloMin || !med.inicio) return [];
+
+  const administradas = med.dosesAdministradas?.length
+    ? [...med.dosesAdministradas]
+    : med.ultimaDoseEm
+      ? [med.ultimaDoseEm]
+      : [];
+
+  const intervaloMs = med.intervaloMin * 60_000;
+  const quantas = med.totalDoses ?? administradas.length + futurasVisiveis;
+  const total = Math.max(quantas, administradas.length);
+
+  const base =
+    administradas.length > 0
+      ? new Date(administradas[administradas.length - 1]).getTime()
+      : new Date(med.inicio).getTime() - intervaloMs;
+
+  const doses: Dose[] = [];
+  for (let i = 0; i < total; i++) {
+    const feita = i < administradas.length;
+    const horario = feita
+      ? administradas[i]
+      : new Date(base + (i - administradas.length + 1) * intervaloMs).toISOString();
+    doses.push({ ordinal: i + 1, horario, feita, proxima: false, atrasada: false });
+  }
+
+  const pendente = doses.find((d) => !d.feita);
+  if (pendente) {
+    pendente.proxima = true;
+    pendente.atrasada = new Date(pendente.horario).getTime() < agora;
+  }
+  return doses;
+}
+
+/**
+ * Recorta a série para caber numa linha do quadro, mantendo o que importa: as
+ * últimas feitas e as próximas. `cortado` avisa quantas ficaram de fora.
+ */
+export function recortarSerie(doses: Dose[], max = 4): { visiveis: Dose[]; cortado: number } {
+  if (doses.length <= max) return { visiveis: doses, cortado: 0 };
+  const iProxima = doses.findIndex((d) => d.proxima);
+  const ancora = iProxima >= 0 ? iProxima : doses.length - 1;
+  let inicio = Math.max(0, ancora - (max - 2));
+  if (inicio + max > doses.length) inicio = doses.length - max;
+  return { visiveis: doses.slice(inicio, inicio + max), cortado: inicio };
+}
+
+/** Rótulo curto de uma dose: "3ª 16:30". */
+export function rotuloDose(d: Dose): string {
+  return `${d.ordinal}ª ${horaHM(d.horario)}`;
 }

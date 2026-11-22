@@ -3,6 +3,7 @@ import type { Controle, Paciente } from '../types';
 import { DU_LABEL, STATUS_LABEL } from '../types';
 import { useApp } from '../state/store';
 import { MenuLeito } from './MenuLeito';
+import { TituloMedicacao, TrilhaDoses } from './TrilhaDoses';
 import { estiloPainel, usePosicaoAncorada } from './usePosicaoAncorada';
 import { estiloCategoria } from '../lib/contrast';
 import {
@@ -391,29 +392,40 @@ export function LinhaPaciente({
 
         <div style={{ flex: '1 1 230px', minWidth: 0 }}>
           <Rotulo>Medicações em curso</Rotulo>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {meds.length === 0 && <Vazio>Nenhuma</Vazio>}
             {meds.map((m) => {
               const vencida =
                 m.proximaDose != null && new Date(m.proximaDose).getTime() < Date.now();
+              const temTrilha = m.intervaloMin != null && m.inicio != null;
               return (
-                <span
+                <div
                   key={m.id}
                   style={{
-                    padding: '3px 8px',
+                    padding: '4px 8px',
                     borderRadius: 6,
                     background: vencida ? 'var(--alert-soft)' : 'var(--tag-bg)',
                     border: `1px solid ${vencida ? 'var(--color-late)' : 'var(--border)'}`,
-                    color: vencida ? 'var(--alert-text)' : 'var(--text)',
-                    fontSize: 11.5,
-                    fontWeight: 600,
                   }}
                 >
-                  {vencida ? '⚠ ' : ''}
-                  {m.nome}
-                  {m.vazaoMlH != null ? ` ${m.vazaoMlH} mL/h` : m.dose ? ` ${m.dose}` : ''}
-                  {m.proximaDose ? ` · próx. ${horaHM(m.proximaDose)}` : ''}
-                </span>
+                  <TituloMedicacao med={m} />
+                  {temTrilha ? (
+                    <div style={{ marginTop: 4 }}>
+                      <TrilhaDoses med={m} max={4} tamanho="compacto" />
+                    </div>
+                  ) : (
+                    <span
+                      style={{
+                        display: 'block',
+                        color: 'var(--text-dim)',
+                        fontSize: 10.5,
+                        marginTop: 2,
+                      }}
+                    >
+                      contínua{m.inicio ? ` desde ${horaHM(m.inicio)}` : ''}
+                    </span>
+                  )}
+                </div>
               );
             })}
           </div>

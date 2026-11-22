@@ -1,7 +1,9 @@
 import {
   idadeGestacional, paridade, situacaoControle, debitoUrinario,
   diureseAnterior, calcularBalanco, alertasClinicos, duracao, isoComHora,
+  serieDoses, recortarSerie, horaHM,
 } from '../src/lib/calc';
+import type { Medicacao } from '../src/types';
 import { estiloCategoria, contrastRatio, hexToRgb, mistura } from '../src/lib/contrast';
 import { estadoInicial } from '../src/services/seed';
 
@@ -101,6 +103,55 @@ ok('FR 25 alerta', alertasClinicos({ fr: 25 }).length === 1);
 ok('dilatação 10 alerta', alertasClinicos({ toque: { dilatacaoCm: 10 } }).length === 1);
 ok('vazio não alerta', alertasClinicos({}).length === 0);
 ok('vários alertas somam', alertasClinicos({ paSistolica: 150, paDiastolica: 95, spo2: 90, fc: 120 }).length === 3);
+
+// --- série de doses
+const medBase: Medicacao = {
+  id: 'mx', pacienteId: 'p1', nome: 'Ampicilina', intervaloMin: 360,
+  inicio: isoComHora('04:00'), status: 'em_curso',
+};
+ok('sem intervalo não gera série', serieDoses({ ...medBase, intervaloMin: undefined }).length === 0);
+ok('sem início não gera série', serieDoses({ ...medBase, inicio: undefined }).length === 0);
+
+const semDoses = serieDoses(medBase, new Date(isoComHora('05:00')).getTime());
+ok('1ª dose cai no horário de início', horaHM(semDoses[0].horario) === '04:00', horaHM(semDoses[0].horario));
+ok('sem doses dadas, a 1ª é a próxima', semDoses[0].proxima && !semDoses[0].feita);
+ok('1ª às 04:00 vista às 05:00 está atrasada', semDoses[0].atrasada === true);
+ok('2ª projetada para 10:00', horaHM(semDoses[1].horario) === '10:00', horaHM(semDoses[1].horario));
+
+const umaDada = serieDoses(
+  { ...medBase, dosesAdministradas: [isoComHora('04:10')] },
+  new Date(isoComHora('06:00')).getTime()
+);
+ok('dose dada guarda o horário REAL', horaHM(umaDada[0].horario) === '04:10', horaHM(umaDada[0].horario));
+ok('dose dada vem marcada como feita', umaDada[0].feita === true);
+// a projeção parte da ÚLTIMA dose dada, não do início: esquema atrasado anda junto
+ok('2ª parte da última dose dada', horaHM(umaDada[1].horario) === '10:10', horaHM(umaDada[1].horario));
+ok('2ª é a próxima', umaDada[1].proxima === true);
+ok('2ª às 10:10 vista às 06:00 não está atrasada', umaDada[1].atrasada === false);
+
+const comTotal = serieDoses(
+  { ...medBase, totalDoses: 2, dosesAdministradas: [isoComHora('08:00')] },
+  new Date(isoComHora('09:00')).getTime()
+);
+ok('total de doses limita a série', comTotal.length === 2, `${comTotal.length}`);
+
+const completo = serieDoses(
+  { ...medBase, totalDoses: 2, dosesAdministradas: [isoComHora('08:00'), isoComHora('14:00')] },
+  new Date(isoComHora('15:00')).getTime()
+);
+ok('esquema completo não tem próxima', completo.every((d) => !d.proxima));
+ok('esquema completo tem todas feitas', completo.every((d) => d.feita));
+
+// --- recorte da série para caber na linha
+const longa = serieDoses(
+  { ...medBase, dosesAdministradas: ['1','2','3','4','5'].map((_, i) => isoComHora(`0${i + 1}:00`)) },
+  new Date(isoComHora('23:00')).getTime()
+);
+const recorte = recortarSerie(longa, 4);
+ok('recorte devolve no máximo 4', recorte.visiveis.length === 4, `${recorte.visiveis.length}`);
+ok('recorte informa quantas ficaram de fora', recorte.cortado === longa.length - 4, `${recorte.cortado}`);
+ok('recorte mantém a próxima visível', recorte.visiveis.some((d) => d.proxima));
+ok('série curta não é recortada', recortarSerie(semDoses, 4).cortado === 0);
 
 // --- contraste: toda categoria passa AA nos dois temas, inclusive cores ruins
 const temas: [string, string, boolean][] = [['claro', '#FFFFFF', false], ['escuro', '#1E1228', true]];

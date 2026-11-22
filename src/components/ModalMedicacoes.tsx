@@ -3,6 +3,7 @@ import type { Medicacao, Paciente } from '../types';
 import { useApp } from '../state/store';
 import { Campo, Modal, Unidade } from './ui';
 import { horaHM, isoComHora } from '../lib/calc';
+import { TrilhaDoses } from './TrilhaDoses';
 
 const num = (v: string): number | undefined =>
   v.trim() === '' ? undefined : Number(v.replace(',', '.'));
@@ -14,6 +15,7 @@ const ATALHOS: {
   via?: string;
   vazaoMlH?: number;
   intervaloMin?: number;
+  totalDoses?: number;
   observacao?: string;
 }[] = [
   { nome: 'Ocitocina', via: 'EV em bomba', vazaoMlH: 12 },
@@ -25,7 +27,7 @@ const ATALHOS: {
   },
   { nome: 'Ampicilina', dose: '2 g', via: 'EV', intervaloMin: 360 },
   { nome: 'Dipirona', dose: '1 g', via: 'EV', intervaloMin: 360 },
-  { nome: 'Betametasona', dose: '12 mg', via: 'IM', intervaloMin: 1440 },
+  { nome: 'Betametasona', dose: '12 mg', via: 'IM', intervaloMin: 1440, totalDoses: 2 },
   { nome: 'Misoprostol', dose: '400 mcg', via: 'Sublingual', intervaloMin: 240 },
 ];
 
@@ -56,6 +58,7 @@ export function ModalMedicacoes({
     adicionarMedicacao,
     atualizarMedicacao,
     registrarDose,
+    desfazerUltimaDose,
     removerMedicacao,
   } = useApp();
 
@@ -68,6 +71,7 @@ export function ModalMedicacoes({
     new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   );
   const [observacao, setObservacao] = useState('');
+  const [totalDoses, setTotalDoses] = useState('');
 
   const leito = estado.leitos.find((l) => l.id === paciente.leitoId);
   const medicacoes = estado.medicacoes.filter((m) => m.pacienteId === paciente.id);
@@ -80,6 +84,7 @@ export function ModalMedicacoes({
     setVia(a.via ?? '');
     setVazao(a.vazaoMlH != null ? String(a.vazaoMlH) : '');
     setIntervalo(a.intervaloMin);
+    setTotalDoses(a.totalDoses != null ? String(a.totalDoses) : '');
     setObservacao(a.observacao ?? '');
   };
 
@@ -97,6 +102,8 @@ export function ModalMedicacoes({
       proximaDose: intervalo
         ? new Date(new Date(inicioIso).getTime() + intervalo * 60_000).toISOString()
         : undefined,
+      totalDoses: num(totalDoses),
+      dosesAdministradas: [],
       observacao: observacao.trim() || undefined,
       status: 'em_curso',
     });
@@ -105,6 +112,7 @@ export function ModalMedicacoes({
     setVia('');
     setVazao('');
     setIntervalo(undefined);
+    setTotalDoses('');
     setObservacao('');
   };
 
@@ -236,7 +244,15 @@ export function ModalMedicacoes({
               ))}
             </select>
           </Campo>
-          <Campo label="Observação" span={3}>
+          <Campo label="Total de doses" dica="Opcional — ex.: 2 para betametasona.">
+            <input
+              inputMode="numeric"
+              value={totalDoses}
+              onChange={(e) => setTotalDoses(e.target.value)}
+              aria-label="Total de doses previstas"
+            />
+          </Campo>
+          <Campo label="Observação" span={2}>
             <input
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
@@ -271,6 +287,7 @@ export function ModalMedicacoes({
                 med={m}
                 onAtualizar={atualizarMedicacao}
                 onDose={registrarDose}
+                onDesfazer={desfazerUltimaDose}
                 onRemover={removerMedicacao}
               />
             ))}
@@ -288,6 +305,7 @@ export function ModalMedicacoes({
                 med={m}
                 onAtualizar={atualizarMedicacao}
                 onDose={registrarDose}
+                onDesfazer={desfazerUltimaDose}
                 onRemover={removerMedicacao}
               />
             ))}
@@ -296,8 +314,11 @@ export function ModalMedicacoes({
       )}
 
       <p style={{ margin: 0, color: 'var(--text-dim)', fontSize: 11.5 }}>
-        <strong>Dose agora</strong> grava o horário e recalcula a próxima pelo intervalo. A
-        medicação com próxima dose vencida aparece em laranja na linha do quadro.
+        <strong>Dose agora</strong> grava o horário real e empurra as próximas pelo
+        intervalo — se uma dose atrasa, o esquema inteiro anda junto. Na trilha,
+        <strong> ✓ verde</strong> é dose dada, <strong>→ âmbar</strong> é a próxima
+        prevista e <strong>⚠ laranja</strong> é dose que passou da hora. Esquema com
+        total de doses definido se conclui sozinho na última.
       </p>
     </Modal>
   );
@@ -307,16 +328,20 @@ function Linha({
   med,
   onAtualizar,
   onDose,
+  onDesfazer,
   onRemover,
 }: {
   med: Medicacao;
   onAtualizar(id: string, mudancas: Partial<Medicacao>, campo?: string): void;
   onDose(m: Medicacao): void;
+  onDesfazer(m: Medicacao): void;
   onRemover(m: Medicacao): void;
 }) {
   const [editando, setEditando] = useState(false);
   const vencida = med.proximaDose != null && new Date(med.proximaDose).getTime() < Date.now();
   const ativa = med.status === 'em_curso';
+  const temTrilha = med.intervaloMin != null && med.inicio != null;
+  const dadas = med.dosesAdministradas?.length ?? (med.ultimaDoseEm ? 1 : 0);
 
   return (
     <div
@@ -349,7 +374,7 @@ function Linha({
           )}
         </span>
 
-        {med.proximaDose && (
+        {!temTrilha && med.proximaDose && (
           <span
             style={{
               flex: '0 0 auto',
@@ -398,7 +423,18 @@ function Linha({
             onClick={() => onDose(med)}
             title="Registra o horário e recalcula a próxima dose"
           >
-            Dose agora
+            ✓ Dose agora
+          </button>
+        )}
+        {dadas > 0 && (
+          <button
+            type="button"
+            className="btn"
+            style={{ flex: '0 0 auto', height: 32, padding: '0 10px', fontSize: 11.5 }}
+            onClick={() => onDesfazer(med)}
+            title="Desfaz a última dose registrada"
+          >
+            Desfazer
           </button>
         )}
         <button
@@ -421,6 +457,12 @@ function Linha({
           ✕
         </button>
       </div>
+
+      {temTrilha && (
+        <div style={{ marginTop: 9 }}>
+          <TrilhaDoses med={med} max={8} />
+        </div>
+      )}
 
       {editando && (
         <div
