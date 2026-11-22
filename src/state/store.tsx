@@ -246,9 +246,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!repo.inscrever || !autenticado) return;
-    return repo.inscrever(() => {
-      void recarregar();
-    });
+    return repo.inscrever(
+      () => {
+        void recarregar();
+      },
+      (motivo) =>
+        setErroGravacao(
+          `O quadro parou de receber mudanças de outras pessoas (${motivo}). ` +
+            'Ele se atualiza sozinho a cada minuto; recarregue a página para voltar ao normal.'
+        )
+    );
   }, [repo, autenticado, recarregar]);
 
   useEffect(() => {

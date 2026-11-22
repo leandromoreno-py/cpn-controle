@@ -27,7 +27,12 @@ export interface Repositorio {
   carregar(): Promise<EstadoApp>;
 
   /** Avisa que algo mudou do outro lado. Devolve o cancelador. */
-  inscrever?(aoMudar: () => void): () => void;
+  /**
+   * Avisa quando algo muda no banco. `aoFalhar` recebe o motivo quando o canal
+   * de tempo real cai — silêncio aqui já custou um quadro que só atualizava
+   * com F5.
+   */
+  inscrever?(aoMudar: () => void, aoFalhar?: (motivo: string) => void): () => void;
 
   /** Só o modo local: grava o estado inteiro de uma vez. */
   salvarTudo?(estado: EstadoApp): void;

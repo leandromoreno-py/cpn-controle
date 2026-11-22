@@ -460,8 +460,14 @@ grant execute on function public.sou_admin() to authenticated;
 do $$
 declare t text;
 begin
+  -- Esta lista TEM de conter toda tabela que o app assina em
+  -- TABELAS_TEMPO_REAL (src/services/supabase.ts). Uma tabela de fora não
+  -- falha sozinha: o servidor descarta TODAS as inscrições do canal que a
+  -- menciona e ainda responde "SUBSCRIBED". Faltava `categorias`, e o app
+  -- ficou sem tempo real desde o começo sem um único erro na tela.
   foreach t in array array['pacientes', 'controles', 'medicacoes',
-                           'exames_programacoes', 'leitos', 'sessoes']
+                           'exames_programacoes', 'leitos', 'sessoes',
+                           'categorias', 'usuarios']
   loop
     if not exists (
       select 1 from pg_publication_tables

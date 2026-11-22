@@ -309,6 +309,15 @@ const auditoriaPara = (a: RegistroAuditoria): Linha => ({
 
 // ------------------------------------------------------------- repositório
 
+/**
+ * Tabelas ouvidas em tempo real.
+ *
+ * **Toda tabela daqui precisa estar na publicação `supabase_realtime`**, no
+ * `supabase/schema.sql`. Uma que esteja de fora não falha sozinha: o servidor
+ * descarta TODAS as inscrições do canal que a menciona e mesmo assim responde
+ * "SUBSCRIBED". `categorias` faltava, e o quadro passou a precisar de F5 sem
+ * um único erro aparecer.
+ */
 const TABELAS_TEMPO_REAL = [
   'pacientes',
   'controles',
@@ -317,6 +326,7 @@ const TABELAS_TEMPO_REAL = [
   'leitos',
   'sessoes',
   'categorias',
+  'usuarios',
 ];
 
 export function criarRepositorioSupabase(): Repositorio {
@@ -377,7 +387,7 @@ export function criarRepositorioSupabase(): Repositorio {
       };
     },
 
-    inscrever(aoMudar) {
+    inscrever(aoMudar, aoFalhar) {
       // Qualquer mudança em qualquer tabela recarrega o estado. Com dezenas de
       // linhas isso é barato e evita reconciliar evento por evento — que é
       // onde moram os bugs difíceis de um quadro em tempo real.
@@ -387,8 +397,25 @@ export function criarRepositorioSupabase(): Repositorio {
           aoMudar()
         );
       }
-      canal.subscribe();
+      canal.subscribe((status, erro) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          aoFalhar?.(erro?.message ?? status);
+        }
+      });
+
+      // Rede de proteção. "SUBSCRIBED" não garante que os eventos venham — foi
+      // assim que o tempo real ficou morto sem ninguém notar. Uma recarga ao
+      // voltar para a aba e outra de minuto em minuto fazem o quadro se
+      // corrigir sozinho mesmo quando o canal mente.
+      const aoVoltar = () => {
+        if (document.visibilityState === 'visible') aoMudar();
+      };
+      document.addEventListener('visibilitychange', aoVoltar);
+      const relogio = setInterval(aoMudar, 60_000);
+
       return () => {
+        document.removeEventListener('visibilitychange', aoVoltar);
+        clearInterval(relogio);
         void db.removeChannel(canal);
       };
     },
