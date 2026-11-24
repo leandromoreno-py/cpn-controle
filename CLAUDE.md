@@ -7,6 +7,23 @@ Brasil, uso em desktop e tablet, fuso America/Fortaleza.
 não tiver autenticação, banco próprio e as medidas de proteção de dados de saúde
 configuradas pela unidade. O banner no topo do app diz isso ao usuário.
 
+## Onde o app vive
+
+Dois endereços, **o mesmo código e o mesmo banco** — não são dois quadros, é o
+mesmo quadro por duas portas:
+
+- https://cpn-controle.vercel.app — Vercel
+- https://leandromoreno-py.github.io/cpn-controle/ — GitHub Pages
+
+O segundo existe porque o proxy do hospital barra o GitHub; o primeiro foi a
+saída. Os dois publicam sozinhos a cada alteração na branch `main`, e os dois
+rodam `scripts/conferir-build.mjs` antes de ir ao ar.
+
+Por isso o build usa **caminhos relativos** (`base: './'` em `vite.config.ts`):
+o mesmo pacote serve na subpasta do GitHub Pages e na raiz do Vercel. Não volte
+a fixar o caminho num host — foi o que quebrou quando a hospedagem precisou
+mudar às pressas.
+
 ## Estado atual
 
 Etapas 1 a 3 implementadas: quadro de pacientes, admissão, modal de controles,

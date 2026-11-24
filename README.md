@@ -1,5 +1,9 @@
 # CPN Controle
 
+**No ar:** https://cpn-controle.vercel.app · https://leandromoreno-py.github.io/cpn-controle/
+
+Os dois saem da branch `main` e usam o mesmo banco.
+
 Quadro de pacientes para um Centro de Parto Normal: leito, identificação, paridade,
 idade gestacional, comorbidades, dilatação e dinâmica uterina, controles com sinais
 vitais, balanço hídrico, medicações em curso e exames programados — com alerta visual
